@@ -142,6 +142,26 @@ function esc(s) {
     .replace(/>/g,'&gt;').replace(/"/g,'&quot;');
 }
 
+const LOG_COLOR_HEX = { red:'#C81515', yellow:'#D4A800', green:'#189A20', blue:'#1040B8' };
+const LOG_WILD_COLORS = ['#C81515','#D4A800','#189A20','#1040B8'];
+const LOG_VALUE_PAT = '[0-9⊘↺C]|\\+[24]';
+
+function colorizeLog(msg) {
+  let s = esc(msg);
+  s = s.replace(new RegExp(`Comodín(?:\\s+(${LOG_VALUE_PAT}))?`, 'g'), (_, val) => {
+    const rain = 'Comodín'.split('').map((ch, i) =>
+      `<span style="color:${LOG_WILD_COLORS[i % 4]};font-weight:700">${ch}</span>`
+    ).join('');
+    return val ? rain + `<b> ${val}</b>` : rain;
+  });
+  s = s.replace(new RegExp(`(Rojo|Amarillo|Verde|Azul)(?:\\s+(${LOG_VALUE_PAT}))?`, 'g'), (_, name, val) => {
+    const key = Object.entries(COLOR_NAME).find(([, v]) => v === name)?.[0];
+    const hex = LOG_COLOR_HEX[key] || '#fff';
+    return `<span style="color:${hex};font-weight:700">${name}${val ? ' '+val : ''}</span>`;
+  });
+  return s;
+}
+
 function genRoomCode() {
   const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
   let code = '';
@@ -528,11 +548,14 @@ function renderStatus(state) {
   const el = document.getElementById('game-status');
   const current = state.players[state.currentPlayerIndex];
 
+  const myTurn = isMyTurn(state);
+  el.classList.toggle('my-turn', myTurn && !state.challengeOpen);
+
   if (state.challengeOpen && state.lastClaimedCard) {
     const lp = state.players.find(p => p.id === state.lastPlayerId);
     const c  = state.lastClaimedCard;
     el.textContent = `${lp?.name || '?'} jugó — dice ${COLOR_NAME[c.color]} ${VALUE_LABEL[c.value]}`;
-  } else if (isMyTurn(state)) {
+  } else if (myTurn) {
     el.textContent = '✨ ¡Tu turno! Elige una carta.';
   } else {
     el.textContent = `Turno de ${current?.name || '?'}`;
@@ -601,7 +624,12 @@ function renderHand(state) {
 function renderLog(state) {
   const el = document.getElementById('game-log');
   el.innerHTML = [...(state.log || [])].reverse().slice(0, 2)
-    .map(msg => `<div class="log-entry">${esc(msg)}</div>`)
+    .map(msg => {
+      const cls = msg.includes('¡Descubierto!') ? ' log-lie'
+                : msg.includes('dijo la verdad') ? ' log-truth'
+                : '';
+      return `<div class="log-entry${cls}">${colorizeLog(msg)}</div>`;
+    })
     .join('');
 }
 

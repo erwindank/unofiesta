@@ -437,6 +437,19 @@ input[type=text]:focus { border-color: var(--blue); }
   color: rgba(255,255,255,.9);
   text-align: center;
   min-height: 1.2em;
+  transition: all .2s ease;
+}
+
+.game-status.my-turn {
+  font-size: 1.25rem;
+  color: #ffe066;
+  text-shadow: 0 0 10px rgba(255,220,50,.8), 0 0 22px rgba(255,180,0,.5);
+  animation: pulse-turn .9s ease-in-out infinite alternate;
+}
+
+@keyframes pulse-turn {
+  from { transform: scale(1);   opacity: .9; }
+  to   { transform: scale(1.05); opacity: 1; }
 }
 
 /* Challenge area */
@@ -457,15 +470,25 @@ input[type=text]:focus { border-color: var(--blue); }
 
 /* Game log */
 .game-log {
-  padding: 0 .75rem;
-  height: 44px;
+  padding: .6rem .75rem;
+  height: 88px;
   overflow: hidden;
   display: flex;
   flex-direction: column;
   gap: 2px;
 }
-.log-entry { font-size: .72rem; color: rgba(255,255,255,.55); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.log-entry:first-child { color: rgba(255,255,255,.9); font-weight: 500; }
+.log-entry { font-size: 1rem; color: rgba(255,255,255,.55); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.log-entry:first-child { font-size: 1.1rem; color: #fff; font-weight: 600; }
+.log-entry.log-lie   { color: #ff6b6b; text-shadow: 0 0 8px rgba(200,21,21,.9), 0 0 20px rgba(200,21,21,.5); }
+.log-entry.log-truth { color: #6bff8a; text-shadow: 0 0 8px rgba(24,154,32,.9), 0 0 20px rgba(24,154,32,.5); }
+.log-entry.log-lie span,
+.log-entry.log-truth span {
+  text-shadow:
+    -1px -1px 0 #fff,
+     1px -1px 0 #fff,
+    -1px  1px 0 #fff,
+     1px  1px 0 #fff;
+}
 
 /* Hand area */
 .hand-area {

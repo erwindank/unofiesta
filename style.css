@@ -344,6 +344,12 @@ input[type=text]:focus { border-color: var(--blue); }
 .card.playable { cursor: pointer; }
 .card.playable:hover { transform: translateY(-6px) scale(1.05); z-index: 2; }
 .card.selected-card  { transform: translateY(-10px); outline: 3px solid #fff; }
+.card.drawn-fresh {
+  box-shadow: 0 0 0 3px rgba(255,255,255,.85), 0 0 14px 5px rgba(255,220,80,.65);
+  transform: translateY(-8px);
+  z-index: 2;
+}
+.card.drawn-fresh.playable:hover { transform: translateY(-13px) scale(1.06); }
 
 /* Card labels — must sit above the oval (z-index > 0) */
 .card-label {
@@ -482,6 +488,10 @@ input[type=text]:focus { border-color: var(--blue); }
 
 /* UNO button */
 #uno-btn { align-self: flex-end; padding: .4rem 1rem; }
+
+/* Pass turn button */
+.turn-actions { display: flex; justify-content: center; margin-top: .4rem; }
+#pass-btn { font-size: .8rem; padding: .35rem .9rem; }
 
 /* Claim dialog */
 .claim-dialog {

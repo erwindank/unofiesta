@@ -98,6 +98,7 @@ let unoAlertTimeout = null;
 let currentUnoCallRequired = null;
 let unoCallClearPending = false;
 let sevenSwapMode = null; // 'normal' | 'liar' | null
+let drawnCardState = null; // { cardIdx, canPlay } — set after drawing, cleared when turn ends
 
 function isLiarCard(card) {
   return card && card.liar === true;
@@ -371,6 +372,7 @@ async function handleStart() {
 // ============================================================
 
 function renderGame(state) {
+  if (!isMyTurn(state)) drawnCardState = null;
   renderTopCard(state);
   renderOpponents(state);
   renderStatus(state);
@@ -380,10 +382,18 @@ function renderGame(state) {
   renderLog(state);
   renderUnoCallOverlay(state);
   renderSevenSwapOverlay(state);
+  renderTurnActions(state);
 
-  // Draw pile cursor
   const myTurn = isMyTurn(state) && !state.challengeOpen;
-  document.getElementById('draw-pile-area').style.opacity = myTurn ? '1' : '0.5';
+  const canDraw = myTurn && drawnCardState === null;
+  document.getElementById('draw-pile-area').style.opacity = canDraw ? '1' : '0.5';
+}
+
+function renderTurnActions(state) {
+  const myTurn = isMyTurn(state) && !state.challengeOpen;
+  const passBtn = document.getElementById('pass-btn');
+  passBtn.classList.toggle('hidden', !myTurn);
+  if (myTurn) passBtn.disabled = drawnCardState === null;
 }
 
 function renderUnoAlert(state) {
@@ -553,20 +563,37 @@ function renderHand(state) {
   const handEl = document.getElementById('player-hand');
   const myHand = state.hands?.[localUid] || [];
   const myTurn = isMyTurn(state) && !state.challengeOpen;
+  const inDrawMode = myTurn && drawnCardState !== null;
 
-  handEl.innerHTML = myHand.map((card, i) =>
-    `<div class="card ${card.color} ${isLiarCard(card) ? 'liar' : ''} ${myTurn ? 'playable' : ''}"
+  handEl.innerHTML = myHand.map((card, i) => {
+    let isPlayable, onclick, extraClass = '';
+    if (inDrawMode) {
+      const isDrawn = i === drawnCardState.cardIdx;
+      isPlayable = isDrawn && drawnCardState.canPlay;
+      onclick = isPlayable ? `selectCard(${i})` : '';
+      if (isDrawn) extraClass = ' drawn-fresh';
+    } else {
+      isPlayable = myTurn;
+      onclick = myTurn ? `selectCard(${i})` : '';
+    }
+    return `<div class="card ${card.color} ${isLiarCard(card) ? 'liar' : ''}${isPlayable ? ' playable' : ''}${extraClass}"
       data-index="${i}"
-      onclick="${myTurn ? `selectCard(${i})` : ''}"
+      onclick="${onclick}"
     >
       <span class="card-label tl">${VALUE_LABEL[card.value]}</span>
       <span class="card-label center">${VALUE_LABEL[card.value]}</span>
       <span class="card-label br">${VALUE_LABEL[card.value]}</span>
-    </div>`
-  ).join('');
+    </div>`;
+  }).join('');
 
-  document.getElementById('hand-label').textContent =
-    myTurn ? 'Tu turno — haz clic en una carta para jugar' : `Tu mano (${myHand.length})`;
+  if (inDrawMode) {
+    document.getElementById('hand-label').textContent = drawnCardState.canPlay
+      ? '¡Carta robada jugable! Juégala o pasa.'
+      : 'Carta robada no es jugable. Pasa el turno.';
+  } else {
+    document.getElementById('hand-label').textContent =
+      myTurn ? 'Tu turno — haz clic en una carta para jugar' : `Tu mano (${myHand.length})`;
+  }
 
   document.getElementById('uno-btn').classList.add('hidden');
 }
@@ -587,6 +614,8 @@ async function selectCard(index) {
   const myHand = roomState.hands?.[localUid] || [];
   const card = myHand[index];
   if (!card) return;
+
+  if (drawnCardState !== null && (index !== drawnCardState.cardIdx || !drawnCardState.canPlay)) return;
 
   if (card.value !== 'wild' && !isLiarCard(card) && !isActualPlayable(card, roomState)) {
     alert('No puedes jugar esta carta boca arriba. Elige otra o roba.');
@@ -1116,6 +1145,7 @@ function applyEffectsAndAdvance(state) {
 async function handleDraw() {
   const state = roomState;
   if (!isMyTurn(state) || state.challengeOpen) return;
+  if (drawnCardState !== null) return;
 
   const { drawn, newDrawPile } = takeCards(state.drawPile, 1);
   const newHand  = [...(state.hands?.[localUid] || []), ...drawn];
@@ -1123,16 +1153,38 @@ async function handleDraw() {
   const players  = state.players.map(p =>
     p.id === localUid ? { ...p, cardCount: newHand.length } : p
   );
-  const nxt = nextPlayerIndex(state);
-  const log = addLog(state.log, `${localName} robó una carta y pasó.`);
+
+  const drawnCard = newHand[newHand.length - 1];
+  const canPlay = !!(drawnCard && (
+    drawnCard.value === 'wild' ||
+    isLiarCard(drawnCard) ||
+    isActualPlayable(drawnCard, state)
+  ));
+  drawnCardState = { cardIdx: newHand.length - 1, canPlay };
 
   await db.collection('rooms').doc(currentRoomId).update({
     hands: newHands,
     drawPile: newDrawPile,
     players,
-    currentPlayerIndex: nxt,
+    lastActivity: firebase.firestore.FieldValue.serverTimestamp()
+  });
+}
+
+async function handlePassTurn() {
+  const state = roomState;
+  if (!isMyTurn(state) || state.challengeOpen || drawnCardState === null) return;
+
+  const hadDrawn = drawnCardState !== null;
+  drawnCardState = null;
+
+  const logMsg = hadDrawn
+    ? `${localName} robó una carta y pasó.`
+    : `${localName} pasó su turno.`;
+
+  await db.collection('rooms').doc(currentRoomId).update({
+    currentPlayerIndex: nextPlayerIndex(state),
     unoCallRequired: firebase.firestore.FieldValue.delete(),
-    log,
+    log: addLog(state.log, logMsg),
     lastActivity: firebase.firestore.FieldValue.serverTimestamp()
   });
 }

@@ -283,21 +283,22 @@ input[type=text]:focus { border-color: var(--green); }
 .card.selected-card { transform: translateY(-10px); outline: 3px solid #fff; }
 
 .card.liar {
-  border-color: rgba(255,255,255,.7);
+  border-color: rgba(255,255,255,.55);
   position: relative;
   overflow: hidden;
+  box-shadow: 2px 4px 12px rgba(0,0,0,.5), inset 0 0 12px rgba(0,0,0,.35);
 }
 .card.liar::before {
   content: '';
   position: absolute;
   inset: 0;
-  background-image:
-    radial-gradient(circle at 20% 20%, rgba(255,255,255,.12) 0%, transparent 20%),
-    radial-gradient(circle at 80% 80%, rgba(255,255,255,.08) 0%, transparent 18%),
-    linear-gradient(135deg, rgba(255,255,255,.08) 25%, transparent 25%, transparent 50%, rgba(255,255,255,.08) 50%, rgba(255,255,255,.08) 75%, transparent 75%, transparent);
-  background-size: 100% 100%, 100% 100%, 12px 12px;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='150' height='150'%3E%3Cfilter id='g'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.72' numOctaves='4' stitchTiles='stitch'/%3E%3CfeColorMatrix type='saturate' values='0'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23g)'/%3E%3C/svg%3E");
+  background-size: 100% 100%;
+  mix-blend-mode: multiply;
+  opacity: 0.72;
   pointer-events: none;
-  mix-blend-mode: overlay;
+  z-index: 0;
+  border-radius: 8px;
 }
 .card.liar .card-label { position: relative; z-index: 1; }
 

@@ -28,7 +28,6 @@ const COLORS  = ['red', 'yellow', 'green', 'blue'];
 const NUMBERS = ['0','1','2','3','4','5','6','7','8','9'];
 const ACTIONS = ['skip','reverse','draw2'];
 const WILDS   = ['wild','wild4'];
-const LIAR_CARDS = [...ACTIONS, 'wild4'];
 const ALL_VALUES = [...NUMBERS, ...ACTIONS, ...WILDS];
 
 const VALUE_LABEL = {
@@ -45,15 +44,24 @@ const COLOR_NAME = { red:'Rojo', yellow:'Amarillo', green:'Verde', blue:'Azul', 
 function createDeck() {
   const deck = [];
   for (const color of COLORS) {
-    deck.push({ color, value: '0' });
-    for (const v of [...['1','2','3','4','5','6','7','8','9'], ...ACTIONS]) {
-      deck.push({ color, value: v });
-      deck.push({ color, value: v });
+    // 0: one normal copy, one liar copy
+    deck.push({ color, value: '0', liar: false });
+    deck.push({ color, value: '0', liar: true });
+    // 1–9: one normal copy, one liar copy each
+    for (const v of ['1','2','3','4','5','6','7','8','9']) {
+      deck.push({ color, value: v, liar: false });
+      deck.push({ color, value: v, liar: true });
+    }
+    // Action cards: all liar cards
+    for (const a of ACTIONS) {
+      deck.push({ color, value: a, liar: true });
+      deck.push({ color, value: a, liar: true });
     }
   }
+  // Wild = normal (played face-up, pick a color); wild4 = liar card
   for (let i = 0; i < 4; i++) {
-    deck.push({ color: 'black', value: 'wild' });
-    deck.push({ color: 'black', value: 'wild4' });
+    deck.push({ color: 'black', value: 'wild',  liar: false });
+    deck.push({ color: 'black', value: 'wild4', liar: true });
   }
   return deck;
 }
@@ -89,7 +97,7 @@ let claimValue = null;
 let unoAlertTimeout = null;
 
 function isLiarCard(card) {
-  return card && LIAR_CARDS.includes(card.value);
+  return card && card.liar === true;
 }
 
 function isActualPlayable(card, state) {
@@ -813,6 +821,15 @@ function applyEffectsAndAdvance(state) {
   let newIdx    = nextIdx;
 
   switch (claimed.value) {
+
+    case '0': {
+      const passedHands = passHands(hands, players, direction);
+      hands = { ...hands, ...passedHands };
+      players = players.map(p => ({ ...p, cardCount: (hands[p.id] || []).length }));
+      logExtra = 'Todos pasan su mano en la dirección actual.';
+      newIdx = nextIdx;
+      break;
+    }
 
     case 'skip': {
       logExtra = `${players[nextIdx]?.name} pierde su turno.`;

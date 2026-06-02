@@ -86,6 +86,7 @@ let selectedCardIdx = null;
 let selectedActualCard = null;
 let claimColor = null;
 let claimValue = null;
+let unoAlertTimeout = null;
 
 function isLiarCard(card) {
   return card && LIAR_CARDS.includes(card.value);
@@ -362,6 +363,7 @@ function renderGame(state) {
   renderTopCard(state);
   renderOpponents(state);
   renderStatus(state);
+  renderUnoAlert(state);
   renderChallengeArea(state);
   renderHand(state);
   renderLog(state);
@@ -369,6 +371,32 @@ function renderGame(state) {
   // Draw pile cursor
   const myTurn = isMyTurn(state) && !state.challengeOpen;
   document.getElementById('draw-pile-area').style.opacity = myTurn ? '1' : '0.5';
+}
+
+function renderUnoAlert(state) {
+  const alertEl = document.getElementById('uno-alert');
+
+  if (state?.unoAlert) {
+    alertEl.classList.remove('hidden');
+    alertEl.innerHTML = `<span>${esc(state.unoAlert)}</span>`;
+
+    if (!unoAlertTimeout) {
+      unoAlertTimeout = setTimeout(async () => {
+        unoAlertTimeout = null;
+        if (!roomState || !roomState.unoAlert) return;
+        await db.collection('rooms').doc(currentRoomId).update({
+          unoAlert: firebase.firestore.FieldValue.delete()
+        });
+      }, 3000);
+    }
+  } else {
+    alertEl.classList.add('hidden');
+    alertEl.textContent = '';
+    if (unoAlertTimeout) {
+      clearTimeout(unoAlertTimeout);
+      unoAlertTimeout = null;
+    }
+  }
 }
 
 function renderTopCard(state) {
@@ -440,7 +468,7 @@ function renderHand(state) {
   const myTurn = isMyTurn(state) && !state.challengeOpen;
 
   handEl.innerHTML = myHand.map((card, i) =>
-    `<div class="card ${card.color} ${myTurn ? 'playable' : ''}"
+    `<div class="card ${card.color} ${isLiarCard(card) ? 'liar' : ''} ${myTurn ? 'playable' : ''}"
       data-index="${i}"
       onclick="${myTurn ? `selectCard(${i})` : ''}"
     >
@@ -453,7 +481,11 @@ function renderHand(state) {
   document.getElementById('hand-label').textContent =
     myTurn ? 'Tu turno — haz clic en una carta para jugar' : `Tu mano (${myHand.length})`;
 
-  document.getElementById('uno-btn').classList.toggle('hidden', myHand.length !== 1);
+  const hasCatchableOpponent = state.players.some(p => p.id !== localUid && p.cardCount === 1);
+  const showUnoBtn = !state.challengeOpen && (myHand.length === 1 || hasCatchableOpponent);
+  const unoBtn = document.getElementById('uno-btn');
+  unoBtn.classList.toggle('hidden', !showUnoBtn);
+  unoBtn.textContent = myHand.length === 1 ? '¡UNO!' : '¡Atrapar UNO!';
 }
 
 function renderLog(state) {
@@ -484,7 +516,7 @@ async function selectCard(index) {
   claimValue = card.value;
 
   const preview = document.getElementById('actual-card-preview');
-  preview.innerHTML = `<div class="card ${card.color}" style="width:50px;height:75px;margin:0 auto">
+  preview.innerHTML = `<div class="card ${card.color} ${isLiarCard(card) ? 'liar' : ''}" style="width:50px;height:75px;margin:0 auto">
     <span class="card-label tl">${VALUE_LABEL[card.value]}</span>
     <span class="card-label center" style="font-size:1.2rem">${VALUE_LABEL[card.value]}</span>
     <span class="card-label br">${VALUE_LABEL[card.value]}</span>
@@ -873,10 +905,56 @@ function takeCards(drawPile, count) {
 // ============================================================
 
 async function callUno() {
-  if (!roomState) return;
-  const log = addLog(roomState.log, `${localName} dice ¡UNO! 🎴`);
+  const state = roomState;
+  if (!state) return;
+
+  const myHand = state.hands?.[localUid] || [];
+  const targets = state.players.filter(p => p.id !== localUid && p.cardCount === 1);
+
+  if (myHand.length === 1) {
+    const log = addLog(state.log, `${localName} dice ¡UNO! 🎴`);
+    await db.collection('rooms').doc(currentRoomId).update({
+      log,
+      lastActivity: firebase.firestore.FieldValue.serverTimestamp()
+    });
+    return;
+  }
+
+  if (targets.length === 0) {
+    const log = addLog(state.log, `${localName} intenta atrapar UNO pero no hay nadie con una carta.`);
+    await db.collection('rooms').doc(currentRoomId).update({
+      log,
+      lastActivity: firebase.firestore.FieldValue.serverTimestamp()
+    });
+    return;
+  }
+
+  let { hands, players, drawPile } = state;
+  let log = state.log;
+
+  for (const target of targets) {
+    const { drawn, newDrawPile } = takeCards(drawPile, 2);
+    drawPile = newDrawPile;
+    hands = { ...hands, [target.id]: [...(hands[target.id] || []), ...drawn] };
+    players = players.map(p =>
+      p.id === target.id ? { ...p, cardCount: hands[p.id].length } : p
+    );
+    log = addLog(log,
+      `🚨 ${localName} atrapó a ${target.name} con una carta. ${target.name} roba 2 cartas.`
+    );
+  }
+
+  const targetNames = targets
+    .map(t => (t.name && t.name.trim()) ? t.name.trim() : 'el jugador')
+    .join(', ');
+  const unoAlert = `GRITARLE UNO a ${targetNames}!`;
+
   await db.collection('rooms').doc(currentRoomId).update({
+    hands,
+    players,
+    drawPile,
     log,
+    unoAlert,
     lastActivity: firebase.firestore.FieldValue.serverTimestamp()
   });
 }

@@ -163,6 +163,7 @@ input[type=text]:focus { border-color: var(--green); }
 #screen-game {
   display: none;
   flex-direction: column;
+  position: relative;
   height: 100dvh;
   background: var(--felt);
   overflow: hidden;
@@ -280,6 +281,64 @@ input[type=text]:focus { border-color: var(--green); }
 .card.playable { cursor: pointer; }
 .card.playable:hover { transform: translateY(-6px) scale(1.05); z-index: 2; }
 .card.selected-card { transform: translateY(-10px); outline: 3px solid #fff; }
+
+.card.liar {
+  border-color: rgba(255,255,255,.7);
+  position: relative;
+  overflow: hidden;
+}
+.card.liar::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background-image:
+    radial-gradient(circle at 20% 20%, rgba(255,255,255,.12) 0%, transparent 20%),
+    radial-gradient(circle at 80% 80%, rgba(255,255,255,.08) 0%, transparent 18%),
+    linear-gradient(135deg, rgba(255,255,255,.08) 25%, transparent 25%, transparent 50%, rgba(255,255,255,.08) 50%, rgba(255,255,255,.08) 75%, transparent 75%, transparent);
+  background-size: 100% 100%, 100% 100%, 12px 12px;
+  pointer-events: none;
+  mix-blend-mode: overlay;
+}
+.card.liar .card-label { position: relative; z-index: 1; }
+
+.uno-alert {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  pointer-events: none;
+  text-align: center;
+  padding: 1rem;
+  font-size: 1.4rem;
+  font-weight: 800;
+  color: #fff;
+  background: radial-gradient(circle at center, rgba(255, 80, 80, .18), rgba(0,0,0,.68) 65%);
+  z-index: 20;
+  animation: uno-alert-fade 0.4s ease-out;
+}
+.uno-alert.hidden { display: none; }
+.uno-alert span {
+  display: inline-block;
+  background: linear-gradient(135deg, rgba(255,89,89,.95), rgba(255,172,0,.95));
+  border: 2px solid rgba(255,255,255,.85);
+  border-radius: 1.4rem;
+  padding: 1rem 1.4rem;
+  box-shadow: 0 0 24px rgba(255,140,0,.35), 0 0 40px rgba(255,255,255,.12);
+  text-shadow: 0 0 8px rgba(0,0,0,.35);
+  transform: scale(1);
+  animation: uno-alert-pulse 1.2s ease-in-out infinite;
+}
+
+@keyframes uno-alert-pulse {
+  0%, 100% { transform: scale(1); }
+  50% { transform: scale(1.05); }
+}
+
+@keyframes uno-alert-fade {
+  from { opacity: 0; transform: translateY(18px); }
+  to { opacity: 1; transform: translateY(0); }
+}
 
 .card-label { font-size: .7rem; line-height: 1; position: absolute; }
 .card-label.tl { top: 4px; left: 6px; }

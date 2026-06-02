@@ -1,0 +1,131 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0">
+  <title>UNO Mentiroso</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+<!-- LANDING -->
+<div id="screen-landing" class="screen active">
+  <div class="landing-card">
+    <h1>🃏 UNO Mentiroso</h1>
+    <p class="tagline">Play cards. Tell lies. Call bluffs.</p>
+    <div>
+      <input type="text" id="player-name" placeholder="Your name" maxlength="16" autocomplete="off">
+    </div>
+    <div class="btn-group">
+      <button class="btn btn-primary" id="create-btn" onclick="handleCreate()">Create Room</button>
+      <button class="btn btn-secondary" onclick="showJoin()">Join Room</button>
+    </div>
+    <div id="join-form" class="hidden" style="display:flex;flex-direction:column;gap:.75rem">
+      <input type="text" id="room-code-input" placeholder="Room code (e.g. XK7M2P)" maxlength="6"
+        autocomplete="off" oninput="this.value=this.value.toUpperCase()">
+      <button class="btn btn-primary" onclick="handleJoin()">Join</button>
+    </div>
+    <div id="landing-error" class="error hidden"></div>
+    <p class="muted" style="font-size:.75rem;text-align:center">Up to 10 players · No account needed</p>
+  </div>
+</div>
+
+<!-- LOBBY -->
+<div id="screen-lobby" class="screen">
+  <div class="lobby-card">
+    <h2>Waiting Room</h2>
+    <div class="room-code-display">
+      <span>Code:</span>
+      <span id="lobby-code" class="room-code"></span>
+      <button class="btn-copy" onclick="copyCode()">Copy</button>
+    </div>
+    <div id="player-list" class="player-list"></div>
+    <div class="lobby-actions">
+      <button id="start-btn" class="btn btn-primary hidden" onclick="handleStart()">Start Game</button>
+      <p id="waiting-msg" class="muted">Waiting for host to start…</p>
+    </div>
+    <p class="muted" style="font-size:.75rem;text-align:center">Share the code with friends to join</p>
+  </div>
+</div>
+
+<!-- GAME -->
+<div id="screen-game" class="screen">
+
+  <!-- Opponents -->
+  <div id="opponents-row" class="opponents-row"></div>
+
+  <!-- Table -->
+  <div class="game-table">
+    <div class="table-center">
+      <div class="pile-area">
+        <div class="pile draw-pile" id="draw-pile-area" onclick="handleDraw()">
+          <div class="card-back"><span>UNO</span></div>
+          <span class="pile-label">Draw</span>
+        </div>
+        <div class="pile discard-pile">
+          <div id="top-card" class="card red">
+            <span class="card-label tl">?</span>
+            <span class="card-label center">?</span>
+            <span class="card-label br">?</span>
+          </div>
+          <span class="pile-label">Discard</span>
+        </div>
+      </div>
+      <div id="game-status" class="game-status"></div>
+    </div>
+
+    <!-- Challenge/Believe -->
+    <div id="challenge-area" class="challenge-area hidden">
+      <p id="challenge-text"></p>
+      <div class="challenge-btns">
+        <button class="btn btn-danger" onclick="handleChallenge()">🚨 Challenge!</button>
+        <button class="btn btn-secondary" onclick="handleBelieve()">✓ Believe</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Log -->
+  <div id="game-log" class="game-log"></div>
+
+  <!-- Hand -->
+  <div class="hand-area">
+    <div style="display:flex;align-items:center;justify-content:space-between">
+      <div id="hand-label" class="hand-label">Your hand</div>
+      <button id="uno-btn" class="btn btn-uno hidden" onclick="callUno()">UNO!</button>
+    </div>
+    <div id="player-hand" class="player-hand"></div>
+  </div>
+</div>
+
+<!-- WINNER -->
+<div id="screen-winner" class="screen">
+  <div class="winner-card">
+    <h2>🎉 Winner!</h2>
+    <p id="winner-name" class="winner-name"></p>
+    <button class="btn btn-primary" onclick="backToLobby()">Play Again</button>
+  </div>
+</div>
+
+<!-- Claim dialog (bottom sheet) -->
+<div id="claim-dialog" class="claim-dialog hidden">
+  <div class="claim-dialog-inner">
+    <h3>Claim this card as…</h3>
+    <div class="card-preview" id="actual-card-preview"></div>
+    <div class="claim-controls">
+      <div id="claim-color-picker" class="claim-color-picker"></div>
+      <div id="claim-value-picker" class="claim-value-picker"></div>
+    </div>
+    <div class="claim-btns">
+      <button class="btn btn-ghost" onclick="cancelPlay()">Cancel</button>
+      <button class="btn btn-primary" onclick="confirmPlay()">Play Card</button>
+    </div>
+  </div>
+</div>
+
+<!-- Firebase SDK -->
+<script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-auth-compat.js"></script>
+<script src="app.js"></script>
+</body>
+</html>

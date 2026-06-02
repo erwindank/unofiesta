@@ -299,17 +299,23 @@ input[type=text]:focus { border-color: var(--blue); }
   overflow: hidden;
 }
 
-/* Dark tinted card backgrounds */
-.card.red    { background: #1c0404; color: #fff;    --oval-color: #C81515; }
-.card.yellow { background: #1a1400; color: #1a1000; --oval-color: #D4A800; }
-.card.green  { background: #021304; color: #fff;    --oval-color: #189A20; }
-.card.blue   { background: #02051a; color: #fff;    --oval-color: #1040B8; }
+/* Normal card — fully vibrant background */
+.card.red    { background: #C81515; color: #fff; }
+.card.yellow { background: #D4A800; color: rgba(0,0,0,.85); }
+.card.green  { background: #189A20; color: #fff; }
+.card.blue   { background: #1040B8; color: #fff; }
 
-/* Colored oval in the card center */
-.card.red::before,
-.card.yellow::before,
-.card.green::before,
-.card.blue::before {
+/* Liar card — dark background with colored oval */
+.card.liar.red    { background: #1c0404; --oval-color: #C81515; }
+.card.liar.yellow { background: #1a1400; color: #1a1000; --oval-color: #D4A800; }
+.card.liar.green  { background: #021304; --oval-color: #189A20; }
+.card.liar.blue   { background: #02051a; color: #fff; --oval-color: #1040B8; }
+
+/* Colored oval — liar cards only */
+.card.liar.red::before,
+.card.liar.yellow::before,
+.card.liar.green::before,
+.card.liar.blue::before {
   content: '';
   position: absolute;
   width: 84%;
@@ -349,7 +355,9 @@ input[type=text]:focus { border-color: var(--blue); }
 .card-label.tl { top: 4px; left: 6px; color: rgba(255,255,255,.85); font-size: .6rem; }
 .card-label.br { bottom: 4px; right: 6px; transform: rotate(180deg); color: rgba(255,255,255,.85); font-size: .6rem; }
 .card.yellow .card-label.tl,
-.card.yellow .card-label.br { color: rgba(0,0,0,.55); }
+.card.yellow .card-label.br { color: rgba(0,0,0,.65); }
+.card.liar.yellow .card-label.tl,
+.card.liar.yellow .card-label.br { color: rgba(255,255,255,.85); }
 .card-label.center {
   font-size: 1.5rem;
   position: relative;

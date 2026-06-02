@@ -95,6 +95,8 @@ let selectedActualCard = null;
 let claimColor = null;
 let claimValue = null;
 let unoAlertTimeout = null;
+let currentUnoCallRequired = null;
+let unoCallClearPending = false;
 
 function isLiarCard(card) {
   return card && card.liar === true;
@@ -375,6 +377,7 @@ function renderGame(state) {
   renderChallengeArea(state);
   renderHand(state);
   renderLog(state);
+  renderUnoCallOverlay(state);
 
   // Draw pile cursor
   const myTurn = isMyTurn(state) && !state.challengeOpen;
@@ -404,6 +407,80 @@ function renderUnoAlert(state) {
       clearTimeout(unoAlertTimeout);
       unoAlertTimeout = null;
     }
+  }
+}
+
+function renderUnoCallOverlay(state) {
+  const overlay = document.getElementById('uno-call-overlay');
+  const req = state.unoCallRequired;
+
+  if (!req || state.challengeOpen) {
+    overlay.classList.add('hidden');
+    currentUnoCallRequired = null;
+    return;
+  }
+
+  const reqPlayer = state.players.find(p => p.id === req.playerId);
+  if (!reqPlayer || reqPlayer.cardCount !== 1) {
+    overlay.classList.add('hidden');
+    currentUnoCallRequired = null;
+    if (!unoCallClearPending) {
+      unoCallClearPending = true;
+      db.collection('rooms').doc(currentRoomId).update({
+        unoCallRequired: firebase.firestore.FieldValue.delete()
+      }).catch(() => {}).then(() => { unoCallClearPending = false; });
+    }
+    return;
+  }
+
+  currentUnoCallRequired = req;
+  const label = document.getElementById('uno-call-label');
+  const btn   = document.getElementById('uno-call-btn');
+
+  if (req.playerId === localUid) {
+    label.textContent = '¡Solo te queda 1 carta!';
+    btn.textContent   = '¡GRITA UNO!';
+  } else {
+    label.textContent = `¡${req.playerName} tiene 1 carta!`;
+    btn.textContent   = `GRITARLE UNO A ${req.playerName.toUpperCase()}`;
+  }
+
+  overlay.classList.remove('hidden');
+}
+
+async function handleUnoCallBtn() {
+  const req = currentUnoCallRequired;
+  if (!req || !roomState) return;
+
+  document.getElementById('uno-call-overlay').classList.add('hidden');
+  currentUnoCallRequired = null;
+
+  if (req.playerId === localUid) {
+    const log = addLog(roomState.log, `${localName} grita ¡UNO! 🎴`);
+    await db.collection('rooms').doc(currentRoomId).update({
+      unoCallRequired: firebase.firestore.FieldValue.delete(),
+      log,
+      lastActivity: firebase.firestore.FieldValue.serverTimestamp()
+    });
+  } else {
+    const state = roomState;
+    let { hands, players, drawPile } = state;
+    const { drawn, newDrawPile } = takeCards(drawPile, 2);
+    hands   = { ...hands, [req.playerId]: [...(hands[req.playerId] || []), ...drawn] };
+    players = players.map(p =>
+      p.id === req.playerId ? { ...p, cardCount: hands[p.id].length } : p
+    );
+    const log = addLog(state.log,
+      `🚨 ${localName} le gritó UNO a ${req.playerName}. ${req.playerName} roba 2 cartas.`
+    );
+    await db.collection('rooms').doc(currentRoomId).update({
+      hands,
+      players,
+      drawPile: newDrawPile,
+      unoCallRequired: firebase.firestore.FieldValue.delete(),
+      log,
+      lastActivity: firebase.firestore.FieldValue.serverTimestamp()
+    });
   }
 }
 
@@ -489,11 +566,7 @@ function renderHand(state) {
   document.getElementById('hand-label').textContent =
     myTurn ? 'Tu turno — haz clic en una carta para jugar' : `Tu mano (${myHand.length})`;
 
-  const hasCatchableOpponent = state.players.some(p => p.id !== localUid && p.cardCount === 1);
-  const showUnoBtn = !state.challengeOpen && (myHand.length === 1 || hasCatchableOpponent);
-  const unoBtn = document.getElementById('uno-btn');
-  unoBtn.classList.toggle('hidden', !showUnoBtn);
-  unoBtn.textContent = myHand.length === 1 ? '¡UNO!' : '¡Atrapar UNO!';
+  document.getElementById('uno-btn').classList.add('hidden');
 }
 
 function renderLog(state) {
@@ -654,6 +727,10 @@ async function playNormalCard(actualCard, cardIndex, chosenColor = null) {
     lastActivity: firebase.firestore.FieldValue.serverTimestamp()
   };
 
+  update.unoCallRequired = (newHand.length === 1 && !won)
+    ? { playerId: localUid, playerName: localName }
+    : firebase.firestore.FieldValue.delete();
+
   if (won) {
     update.status = 'ended';
     update.winner = localUid;
@@ -696,6 +773,9 @@ async function doPlayCard(actualCard, claimedCard, cardIndex) {
     prevTopColor: state.topColor,
     prevTopValue: state.topValue,
     challengeOpen: !won,
+    unoCallRequired: (newHand.length === 1 && !won)
+      ? { playerId: localUid, playerName: localName }
+      : firebase.firestore.FieldValue.delete(),
     log,
     lastActivity: firebase.firestore.FieldValue.serverTimestamp()
   };
@@ -901,6 +981,7 @@ async function handleDraw() {
     drawPile: newDrawPile,
     players,
     currentPlayerIndex: nxt,
+    unoCallRequired: firebase.firestore.FieldValue.delete(),
     log,
     lastActivity: firebase.firestore.FieldValue.serverTimestamp()
   });
@@ -922,6 +1003,10 @@ function takeCards(drawPile, count) {
 // ============================================================
 
 async function callUno() {
+  if (currentUnoCallRequired) {
+    await handleUnoCallBtn();
+    return;
+  }
   const state = roomState;
   if (!state) return;
 

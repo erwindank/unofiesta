@@ -28,14 +28,15 @@ const COLORS  = ['red', 'yellow', 'green', 'blue'];
 const NUMBERS = ['0','1','2','3','4','5','6','7','8','9'];
 const ACTIONS = ['skip','reverse','draw2'];
 const WILDS   = ['wild','wild4'];
+const LIAR_CARDS = [...ACTIONS, 'wild4'];
 const ALL_VALUES = [...NUMBERS, ...ACTIONS, ...WILDS];
 
 const VALUE_LABEL = {
   '0':'0','1':'1','2':'2','3':'3','4':'4',
   '5':'5','6':'6','7':'7','8':'8','9':'9',
-  skip:'⊘', reverse:'↺', draw2:'+2', wild:'W', wild4:'+4'
+  skip:'⊘', reverse:'↺', draw2:'+2', wild:'C', wild4:'+4'
 };
-const COLOR_NAME = { red:'Red', yellow:'Yellow', green:'Green', blue:'Blue', black:'Wild' };
+const COLOR_NAME = { red:'Rojo', yellow:'Amarillo', green:'Verde', blue:'Azul', black:'Comodín' };
 
 // ============================================================
 // DECK
@@ -82,8 +83,19 @@ let roomState     = null;
 
 // Ephemeral play state (never stored in Firestore)
 let selectedCardIdx = null;
+let selectedActualCard = null;
 let claimColor = null;
 let claimValue = null;
+
+function isLiarCard(card) {
+  return card && LIAR_CARDS.includes(card.value);
+}
+
+function isActualPlayable(card, state) {
+  if (!state || !card) return false;
+  if (card.value === 'wild') return true;
+  return card.color === state.topColor || card.value === state.topValue;
+}
 
 // ============================================================
 // INIT — sign in anonymously, restore session
@@ -161,8 +173,8 @@ function showJoin() {
 
 async function handleCreate() {
   const name = document.getElementById('player-name').value.trim();
-  if (!name) { showLandingError('Enter your name first'); return; }
-  if (!localUid) { showLandingError('Still connecting… try again'); return; }
+  if (!name) { showLandingError('Escribe tu nombre primero'); return; }
+  if (!localUid) { showLandingError('Aún conectando… intenta de nuevo'); return; }
   localName = name;
 
   const roomId = genRoomCode();
@@ -199,15 +211,15 @@ async function handleCreate() {
 async function handleJoin() {
   const name = document.getElementById('player-name').value.trim();
   const code = document.getElementById('room-code-input').value.trim().toUpperCase();
-  if (!name) { showLandingError('Enter your name first'); return; }
-  if (code.length !== 6) { showLandingError('Enter the 6-character room code'); return; }
-  if (!localUid) { showLandingError('Still connecting… try again'); return; }
+  if (!name) { showLandingError('Escribe tu nombre primero'); return; }
+  if (code.length !== 6) { showLandingError('Introduce el código de sala de 6 caracteres'); return; }
+  if (!localUid) { showLandingError('Aún conectando… intenta de nuevo'); return; }
 
   const snap = await db.collection('rooms').doc(code).get();
-  if (!snap.exists) { showLandingError('Room not found'); return; }
+  if (!snap.exists) { showLandingError('Sala no encontrada'); return; }
   const data = snap.data();
-  if (data.status !== 'lobby') { showLandingError('Game already started'); return; }
-  if (data.players.length >= 10) { showLandingError('Room is full (max 10)'); return; }
+  if (data.status !== 'lobby') { showLandingError('La partida ya comenzó'); return; }
+  if (data.players.length >= 10) { showLandingError('Sala llena (máximo 10)'); return; }
 
   if (!data.players.find(p => p.id === localUid)) {
     await db.collection('rooms').doc(code).update({
@@ -240,8 +252,8 @@ async function tryRejoin(roomId) {
 function copyCode() {
   navigator.clipboard.writeText(currentRoomId).catch(() => {});
   const btn = document.querySelector('.btn-copy');
-  btn.textContent = 'Copied!';
-  setTimeout(() => { btn.textContent = 'Copy'; }, 1500);
+  btn.textContent = '¡Copiado!';
+  setTimeout(() => { btn.textContent = 'Copiar'; }, 1500);
 }
 
 // ============================================================
@@ -293,7 +305,7 @@ function renderLobby(state) {
 
   if (isHost) {
     startBtn.disabled = !canStart;
-    startBtn.textContent = canStart ? 'Start Game' : 'Waiting for players…';
+    startBtn.textContent = canStart ? 'Iniciar partida' : 'Esperando jugadores…';
   }
 }
 
@@ -335,7 +347,7 @@ async function handleStart() {
     challengeOpen: false,
     hands,
     drawPile: deck.slice(idx),
-    log: [`Game started! ${esc(players[0].name)} goes first.`],
+    log: [`¡Partida iniciada! ${esc(players[0].name)} va primero.`],
     winner: null,
     winnerName: null,
     lastActivity: firebase.firestore.FieldValue.serverTimestamp()
@@ -394,11 +406,11 @@ function renderStatus(state) {
   if (state.challengeOpen && state.lastClaimedCard) {
     const lp = state.players.find(p => p.id === state.lastPlayerId);
     const c  = state.lastClaimedCard;
-    el.textContent = `${lp?.name || '?'} played — claiming ${COLOR_NAME[c.color]} ${VALUE_LABEL[c.value]}`;
+    el.textContent = `${lp?.name || '?'} jugó — dice ${COLOR_NAME[c.color]} ${VALUE_LABEL[c.value]}`;
   } else if (isMyTurn(state)) {
-    el.textContent = '✨ Your turn! Pick a card to play.';
+    el.textContent = '✨ ¡Tu turno! Elige una carta.';
   } else {
-    el.textContent = `${current?.name || '?'}'s turn`;
+    el.textContent = `Turno de ${current?.name || '?'}`;
   }
 }
 
@@ -418,7 +430,7 @@ function renderChallengeArea(state) {
     const c  = state.lastClaimedCard;
     const lp = state.players.find(p => p.id === state.lastPlayerId);
     txt.textContent =
-      `${lp?.name || '?'} claims they played ${COLOR_NAME[c.color]} ${VALUE_LABEL[c.value]}. Believe it?`;
+      `${lp?.name || '?'} dice que jugó ${COLOR_NAME[c.color]} ${VALUE_LABEL[c.value]}. ¿Lo crees?`;
   }
 }
 
@@ -439,7 +451,7 @@ function renderHand(state) {
   ).join('');
 
   document.getElementById('hand-label').textContent =
-    myTurn ? 'Your turn — click a card to play' : `Your hand (${myHand.length})`;
+    myTurn ? 'Tu turno — haz clic en una carta para jugar' : `Tu mano (${myHand.length})`;
 
   document.getElementById('uno-btn').classList.toggle('hidden', myHand.length !== 1);
 }
@@ -455,18 +467,22 @@ function renderLog(state) {
 // CARD SELECTION — opens claim dialog
 // ============================================================
 
-function selectCard(index) {
+async function selectCard(index) {
   if (!roomState) return;
   const myHand = roomState.hands?.[localUid] || [];
   const card = myHand[index];
   if (!card) return;
 
+  if (card.value !== 'wild' && !isLiarCard(card) && !isActualPlayable(card, roomState)) {
+    alert('No puedes jugar esta carta boca arriba. Elige otra o roba.');
+    return;
+  }
+
   selectedCardIdx = index;
-  // Default claim: the card's own identity
-  claimColor = card.color === 'black' ? 'red' : card.color;
+  selectedActualCard = card;
+  claimColor = card.color === 'black' ? roomState.topColor || 'red' : card.color;
   claimValue = card.value;
 
-  // Show actual card preview
   const preview = document.getElementById('actual-card-preview');
   preview.innerHTML = `<div class="card ${card.color}" style="width:50px;height:75px;margin:0 auto">
     <span class="card-label tl">${VALUE_LABEL[card.value]}</span>
@@ -474,8 +490,15 @@ function selectCard(index) {
     <span class="card-label br">${VALUE_LABEL[card.value]}</span>
   </div>`;
 
-  renderClaimPicker();
-  document.getElementById('claim-dialog').classList.remove('hidden');
+  if (card.value === 'wild' || isLiarCard(card)) {
+    renderClaimPicker();
+    document.getElementById('claim-dialog').classList.remove('hidden');
+  } else {
+    document.getElementById('claim-dialog').classList.add('hidden');
+    await playNormalCard(card, index);
+    selectedCardIdx = null;
+    selectedActualCard = null;
+  }
 }
 
 function renderClaimPicker() {
@@ -484,22 +507,26 @@ function renderClaimPicker() {
       onclick="setClaimColor('${c}')" title="${COLOR_NAME[c]}"></button>`
   ).join('');
 
-  document.getElementById('claim-value-picker').innerHTML = ALL_VALUES.map(v =>
-    `<button class="value-btn ${claimValue === v ? 'selected' : ''}"
-      onclick="setClaimValue('${v}')">${VALUE_LABEL[v]}</button>`
-  ).join('');
+  const values = selectedActualCard?.value === 'wild' ? ['wild'] : ALL_VALUES;
+  document.getElementById('claim-value-picker').innerHTML = values.map(v => {
+    const disabled = selectedActualCard?.value === 'wild' && v !== 'wild';
+    return `<button class="value-btn ${claimValue === v ? 'selected' : ''}${disabled ? ' disabled' : ''}"
+      onclick="setClaimValue('${v}')"${disabled ? ' disabled' : ''}>${VALUE_LABEL[v]}</button>`;
+  }).join('');
 }
 
 function setClaimColor(color) { claimColor = color; renderClaimPicker(); }
 function setClaimValue(value) {
+  if (selectedActualCard?.value === 'wild' && value !== 'wild') return;
+  if (selectedActualCard && !isLiarCard(selectedActualCard) && selectedActualCard.value !== 'wild') return;
   claimValue = value;
-  // Wilds use the chosen color, not 'black'
   if (WILDS.includes(value) && claimColor === null) claimColor = 'red';
   renderClaimPicker();
 }
 
 function cancelPlay() {
   selectedCardIdx = null;
+  selectedActualCard = null;
   document.getElementById('claim-dialog').classList.add('hidden');
 }
 
@@ -509,21 +536,91 @@ async function confirmPlay() {
   const actualCard = myHand[selectedCardIdx];
   if (!actualCard) return;
 
-  const isWild = WILDS.includes(claimValue);
-  const claimedCard = { color: isWild ? claimColor : claimColor, value: claimValue };
+  if (actualCard.value === 'wild' || isLiarCard(actualCard)) {
+    const isWild = WILDS.includes(claimValue);
+    const claimedCard = { color: isWild ? claimColor : claimColor, value: claimValue };
 
-  if (!isClaimPlayable(claimedCard, roomState)) {
-    alert(
-      `That claim isn't valid!\n\n` +
-      `Current top card: ${COLOR_NAME[roomState.topColor]} ${VALUE_LABEL[roomState.topValue]}\n\n` +
-      `Your claim must match by color or value, or be a Wild.`
-    );
-    return;
+    if (!isClaimPlayable(claimedCard, roomState)) {
+      alert(
+        `¡Ese anuncio no es válido!\n\n` +
+        `Carta superior: ${COLOR_NAME[roomState.topColor]} ${VALUE_LABEL[roomState.topValue]}\n\n` +
+        `Tu carta debe coincidir por color o valor, o ser un Comodín.`
+      );
+      return;
+    }
+
+    document.getElementById('claim-dialog').classList.add('hidden');
+    await doPlayCard(actualCard, claimedCard, selectedCardIdx);
+  } else {
+    document.getElementById('claim-dialog').classList.add('hidden');
+    await playNormalCard(actualCard, selectedCardIdx, claimColor);
   }
 
-  document.getElementById('claim-dialog').classList.add('hidden');
-  await doPlayCard(actualCard, claimedCard, selectedCardIdx);
   selectedCardIdx = null;
+  selectedActualCard = null;
+}
+
+function passHands(hands, players, direction) {
+  const newHands = {};
+  const order = players.map(p => p.id);
+  const n = order.length;
+  for (let i = 0; i < n; i++) {
+    const fromId = order[i];
+    const toId = order[((i + direction) % n + n) % n];
+    newHands[toId] = hands[fromId];
+  }
+  return newHands;
+}
+
+async function playNormalCard(actualCard, cardIndex, chosenColor = null) {
+  const state = roomState;
+  const myHand = [...(state.hands?.[localUid] || [])];
+  const newHand = myHand.filter((_, i) => i !== cardIndex);
+  const won = newHand.length === 0;
+
+  let topColor = actualCard.color;
+  let topValue = actualCard.value;
+  let log = addLog(state.log,
+    `${localName} jugó ${COLOR_NAME[actualCard.color]} ${VALUE_LABEL[actualCard.value]} boca arriba.`
+  );
+
+  const newHands = { ...state.hands, [localUid]: newHand };
+  let players = state.players.map(p =>
+    p.id === localUid ? { ...p, cardCount: newHand.length } : p
+  );
+
+  if (actualCard.value === 'wild') {
+    topColor = chosenColor || 'red';
+    log = addLog(log, `${localName} eligió el color ${COLOR_NAME[topColor]}.`);
+  }
+
+  if (actualCard.value === '0') {
+    const passedHands = passHands(newHands, state.players, state.direction);
+    Object.assign(newHands, passedHands);
+    players = players.map(p => ({ ...p, cardCount: (newHands[p.id] || []).length }));
+    log = addLog(log, 'Todos pasan su mano en la dirección actual.');
+  }
+
+  const update = {
+    players,
+    hands: newHands,
+    topColor,
+    topValue,
+    currentPlayerIndex: nextPlayerIndex(state),
+    challengeOpen: false,
+    lastActualCard: null,
+    lastClaimedCard: null,
+    log,
+    lastActivity: firebase.firestore.FieldValue.serverTimestamp()
+  };
+
+  if (won) {
+    update.status = 'ended';
+    update.winner = localUid;
+    update.winnerName = localName;
+  }
+
+  await db.collection('rooms').doc(currentRoomId).update(update);
 }
 
 function isClaimPlayable(claimed, state) {
@@ -547,7 +644,7 @@ async function doPlayCard(actualCard, claimedCard, cardIndex) {
   );
 
   const log = addLog(state.log,
-    `${localName} played a card face-down, claiming ${COLOR_NAME[claimedCard.color]} ${VALUE_LABEL[claimedCard.value]}.`
+    `${localName} jugó una carta boca abajo y dijo ${COLOR_NAME[claimedCard.color]} ${VALUE_LABEL[claimedCard.value]}.`
   );
 
   const update = {
@@ -591,14 +688,14 @@ async function handleChallenge() {
   let log = state.log;
 
   if (isLie) {
-    // Liar draws 2, top card reverts, turn goes to challenger (next player)
-    const { drawn, newDrawPile } = takeCards(drawPile, 2);
+    // El mentiroso roba 1 carta, la jugada se cancela y pasa el turno
+    const { drawn, newDrawPile } = takeCards(drawPile, 1);
     hands = { ...hands, [state.lastPlayerId]: [...(hands[state.lastPlayerId] || []), ...drawn] };
     players = players.map(p =>
       p.id === state.lastPlayerId ? { ...p, cardCount: hands[p.id].length } : p
     );
     log = addLog(log,
-      `🚨 CAUGHT! ${liar?.name} lied (was ${COLOR_NAME[actual.color]} ${VALUE_LABEL[actual.value]}). Drew ${drawn.length}.`
+      `🚨 ¡Descubierto! ${liar?.name} mintió (era ${COLOR_NAME[actual.color]} ${VALUE_LABEL[actual.value]}). Robó ${drawn.length}.`
     );
 
     await db.collection('rooms').doc(currentRoomId).update({
@@ -616,14 +713,14 @@ async function handleChallenge() {
     });
 
   } else {
-    // Honest: challenger draws 2, claimed effects apply
-    const { drawn, newDrawPile } = takeCards(drawPile, 2);
+    // Honesto: el desafiante roba 1 carta y se aplica el efecto
+    const { drawn, newDrawPile } = takeCards(drawPile, 1);
     hands = { ...hands, [localUid]: [...(hands[localUid] || []), ...drawn] };
     players = players.map(p =>
       p.id === localUid ? { ...p, cardCount: hands[p.id].length } : p
     );
     log = addLog(log,
-      `✓ ${liar?.name} was honest (${COLOR_NAME[actual.color]} ${VALUE_LABEL[actual.value]}). ${localName} draws ${drawn.length}.`
+      `✓ ${liar?.name} dijo la verdad (${COLOR_NAME[actual.color]} ${VALUE_LABEL[actual.value]}). ${localName} roba ${drawn.length}.`
     );
 
     const advanced = applyEffectsAndAdvance({ ...state, hands, players, drawPile: newDrawPile });
@@ -651,7 +748,7 @@ async function handleBelieve() {
   const lp = state.players.find(p => p.id === state.lastPlayerId);
   const advanced = applyEffectsAndAdvance(state);
   const log = addLog(
-    addLog(state.log, `${localName} believes ${lp?.name}.`),
+    addLog(state.log, `${localName} confía en ${lp?.name}.`),
     advanced.logExtra
   );
 
@@ -686,7 +783,7 @@ function applyEffectsAndAdvance(state) {
   switch (claimed.value) {
 
     case 'skip': {
-      logExtra = `${players[nextIdx]?.name} is skipped!`;
+      logExtra = `${players[nextIdx]?.name} pierde su turno.`;
       newIdx   = ((nextIdx + direction) % n + n) % n;
       break;
     }
@@ -694,11 +791,11 @@ function applyEffectsAndAdvance(state) {
     case 'reverse': {
       direction = -direction;
       if (n === 2) {
-        // With 2 players, Reverse = Skip: same player goes again
-        logExtra = `${players[nextIdx]?.name} is skipped (reverse)!`;
+        // Con 2 jugadores, Reverse = Skip: el mismo jugador juega de nuevo
+        logExtra = `${players[nextIdx]?.name} pierde su turno (reverse).`;
         newIdx   = currentPlayerIndex;
       } else {
-        logExtra = 'Direction reversed!';
+        logExtra = '¡Dirección invertida!';
         newIdx   = ((currentPlayerIndex + direction) % n + n) % n;
       }
       break;
@@ -710,7 +807,7 @@ function applyEffectsAndAdvance(state) {
       drawPile = newDrawPile;
       hands    = { ...hands, [tid]: [...(hands[tid] || []), ...drawn] };
       players  = players.map(p => p.id === tid ? { ...p, cardCount: hands[p.id].length } : p);
-      logExtra = `${players[nextIdx]?.name} draws 2 and is skipped!`;
+      logExtra = `${players[nextIdx]?.name} roba 2 y pierde su turno.`;
       newIdx   = ((nextIdx + direction) % n + n) % n;
       break;
     }
@@ -721,7 +818,7 @@ function applyEffectsAndAdvance(state) {
       drawPile = newDrawPile;
       hands    = { ...hands, [tid]: [...(hands[tid] || []), ...drawn] };
       players  = players.map(p => p.id === tid ? { ...p, cardCount: hands[p.id].length } : p);
-      logExtra = `${players[nextIdx]?.name} draws 4 and is skipped!`;
+      logExtra = `${players[nextIdx]?.name} roba 4 y pierde su turno.`;
       newIdx   = ((nextIdx + direction) % n + n) % n;
       break;
     }
@@ -748,7 +845,7 @@ async function handleDraw() {
     p.id === localUid ? { ...p, cardCount: newHand.length } : p
   );
   const nxt = nextPlayerIndex(state);
-  const log = addLog(state.log, `${localName} drew a card and passed.`);
+  const log = addLog(state.log, `${localName} robó una carta y pasó.`);
 
   await db.collection('rooms').doc(currentRoomId).update({
     hands: newHands,
@@ -777,7 +874,7 @@ function takeCards(drawPile, count) {
 
 async function callUno() {
   if (!roomState) return;
-  const log = addLog(roomState.log, `${localName} says UNO! 🎴`);
+  const log = addLog(roomState.log, `${localName} dice ¡UNO! 🎴`);
   await db.collection('rooms').doc(currentRoomId).update({
     log,
     lastActivity: firebase.firestore.FieldValue.serverTimestamp()

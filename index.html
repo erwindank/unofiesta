@@ -12,39 +12,45 @@
 <div id="screen-landing" class="screen active">
   <div class="landing-card">
     <h1>🃏 UNO Mentiroso</h1>
-    <p class="tagline">Play cards. Tell lies. Call bluffs.</p>
+    <p class="tagline">Juega cartas. Cuenta mentiras. ¡Atrapa al farol!</p>
+    <div class="rules-card">
+      <h2>Cómo jugar</h2>
+      <p>En tu turno, juega una carta normal <strong>boca arriba</strong> que coincida por color, número o símbolo. Si juegas una carta de mentiroso, debes ponerla <strong>boca abajo</strong> y anunciar qué carta es.</p>
+      <p>Si alguien cree que mientes, puede gritar <strong>¡Mentiroso!</strong> antes del siguiente turno. Si estabas mintiendo, recuperas la carta y robas 1 carta. Si decías la verdad, quien desafió roba 1 carta.</p>
+      <p>El 0 hace que todos pasen su mano en la dirección actual. Cuando te quede una carta, grita <strong>¡UNO!</strong> antes del siguiente turno.</p>
+    </div>
     <div>
-      <input type="text" id="player-name" placeholder="Your name" maxlength="16" autocomplete="off">
+      <input type="text" id="player-name" placeholder="Tu nombre" maxlength="16" autocomplete="off">
     </div>
     <div class="btn-group">
-      <button class="btn btn-primary" id="create-btn" onclick="handleCreate()">Create Room</button>
-      <button class="btn btn-secondary" onclick="showJoin()">Join Room</button>
+      <button class="btn btn-primary" id="create-btn" onclick="handleCreate()">Crear sala</button>
+      <button class="btn btn-secondary" onclick="showJoin()">Unirse</button>
     </div>
     <div id="join-form" class="hidden" style="display:flex;flex-direction:column;gap:.75rem">
-      <input type="text" id="room-code-input" placeholder="Room code (e.g. XK7M2P)" maxlength="6"
+      <input type="text" id="room-code-input" placeholder="Código de sala (p.ej. XK7M2P)" maxlength="6"
         autocomplete="off" oninput="this.value=this.value.toUpperCase()">
-      <button class="btn btn-primary" onclick="handleJoin()">Join</button>
+      <button class="btn btn-primary" onclick="handleJoin()">Unirse</button>
     </div>
     <div id="landing-error" class="error hidden"></div>
-    <p class="muted" style="font-size:.75rem;text-align:center">Up to 10 players · No account needed</p>
+    <p class="muted" style="font-size:.75rem;text-align:center">Hasta 10 jugadores · No se necesita cuenta</p>
   </div>
 </div>
 
 <!-- LOBBY -->
 <div id="screen-lobby" class="screen">
   <div class="lobby-card">
-    <h2>Waiting Room</h2>
+    <h2>Sala de espera</h2>
     <div class="room-code-display">
-      <span>Code:</span>
+      <span>Código:</span>
       <span id="lobby-code" class="room-code"></span>
-      <button class="btn-copy" onclick="copyCode()">Copy</button>
+      <button class="btn-copy" onclick="copyCode()">Copiar</button>
     </div>
     <div id="player-list" class="player-list"></div>
     <div class="lobby-actions">
-      <button id="start-btn" class="btn btn-primary hidden" onclick="handleStart()">Start Game</button>
-      <p id="waiting-msg" class="muted">Waiting for host to start…</p>
+      <button id="start-btn" class="btn btn-primary hidden" onclick="handleStart()">Iniciar partida</button>
+      <p id="waiting-msg" class="muted">Esperando al anfitrión…</p>
     </div>
-    <p class="muted" style="font-size:.75rem;text-align:center">Share the code with friends to join</p>
+    <p class="muted" style="font-size:.75rem;text-align:center">Comparte el código con amigos para unirse</p>
   </div>
 </div>
 
@@ -60,7 +66,7 @@
       <div class="pile-area">
         <div class="pile draw-pile" id="draw-pile-area" onclick="handleDraw()">
           <div class="card-back"><span>UNO</span></div>
-          <span class="pile-label">Draw</span>
+          <span class="pile-label">Robar</span>
         </div>
         <div class="pile discard-pile">
           <div id="top-card" class="card red">
@@ -68,7 +74,7 @@
             <span class="card-label center">?</span>
             <span class="card-label br">?</span>
           </div>
-          <span class="pile-label">Discard</span>
+          <span class="pile-label">Descarte</span>
         </div>
       </div>
       <div id="game-status" class="game-status"></div>
@@ -78,8 +84,8 @@
     <div id="challenge-area" class="challenge-area hidden">
       <p id="challenge-text"></p>
       <div class="challenge-btns">
-        <button class="btn btn-danger" onclick="handleChallenge()">🚨 Challenge!</button>
-        <button class="btn btn-secondary" onclick="handleBelieve()">✓ Believe</button>
+      <button class="btn btn-danger" onclick="handleChallenge()">🚨 ¡Mentiroso!</button>
+      <button class="btn btn-secondary" onclick="handleBelieve()">✓ Lo creo</button>
       </div>
     </div>
   </div>
@@ -90,8 +96,8 @@
   <!-- Hand -->
   <div class="hand-area">
     <div style="display:flex;align-items:center;justify-content:space-between">
-      <div id="hand-label" class="hand-label">Your hand</div>
-      <button id="uno-btn" class="btn btn-uno hidden" onclick="callUno()">UNO!</button>
+      <div id="hand-label" class="hand-label">Tu mano</div>
+      <button id="uno-btn" class="btn btn-uno hidden" onclick="callUno()">¡UNO!</button>
     </div>
     <div id="player-hand" class="player-hand"></div>
   </div>
@@ -100,24 +106,24 @@
 <!-- WINNER -->
 <div id="screen-winner" class="screen">
   <div class="winner-card">
-    <h2>🎉 Winner!</h2>
+    <h2>🎉 ¡Ganador!</h2>
     <p id="winner-name" class="winner-name"></p>
-    <button class="btn btn-primary" onclick="backToLobby()">Play Again</button>
+    <button class="btn btn-primary" onclick="backToLobby()">Jugar de nuevo</button>
   </div>
 </div>
 
 <!-- Claim dialog (bottom sheet) -->
 <div id="claim-dialog" class="claim-dialog hidden">
   <div class="claim-dialog-inner">
-    <h3>Claim this card as…</h3>
+    <h3>Declara esta carta como…</h3>
     <div class="card-preview" id="actual-card-preview"></div>
     <div class="claim-controls">
       <div id="claim-color-picker" class="claim-color-picker"></div>
       <div id="claim-value-picker" class="claim-value-picker"></div>
     </div>
     <div class="claim-btns">
-      <button class="btn btn-ghost" onclick="cancelPlay()">Cancel</button>
-      <button class="btn btn-primary" onclick="confirmPlay()">Play Card</button>
+      <button class="btn btn-ghost" onclick="cancelPlay()">Cancelar</button>
+      <button class="btn btn-primary" onclick="confirmPlay()">Jugar carta</button>
     </div>
   </div>
 </div>

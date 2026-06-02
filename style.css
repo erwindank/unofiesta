@@ -59,6 +59,24 @@ input[type=text] {
 }
 input[type=text]:focus { border-color: var(--green); }
 
+.rules-card {
+  background: rgba(255,255,255,.08);
+  border: 1px solid rgba(255,255,255,.12);
+  border-radius: 12px;
+  padding: 1rem;
+  color: #f0f8f3;
+  font-size: .92rem;
+  line-height: 1.5;
+}
+.rules-card h2 {
+  margin-bottom: .5rem;
+  font-size: 1rem;
+  color: #fff;
+}
+.rules-card p {
+  margin-bottom: .55rem;
+}
+
 .btn-group { display: flex; gap: .75rem; }
 .btn-group .btn { flex: 1; }
 

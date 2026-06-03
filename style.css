@@ -774,8 +774,48 @@ input[type=text]:focus { border-color: var(--blue); }
   display: flex;
   flex-direction: column;
   gap: .4rem;
+  transition: box-shadow .3s ease;
+}
+.hand-area.my-turn {
+  animation: turn-glow 1.4s ease-in-out infinite;
+}
+@keyframes turn-glow {
+  0%   { box-shadow: 0 0 0 2px rgba(255,215,0,.4),  0 0 10px 2px rgba(255,215,0,.1); }
+  50%  { box-shadow: 0 0 0 3px rgba(255,215,0,.9),  0 0 30px 10px rgba(255,215,0,.45); }
+  100% { box-shadow: 0 0 0 2px rgba(255,215,0,.4),  0 0 10px 2px rgba(255,215,0,.1); }
 }
 .hand-label { font-size: .75rem; color: rgba(255,255,255,.55); text-transform: uppercase; letter-spacing: .5px; }
+
+/* Turn order bar */
+.turn-order-info {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  font-size: .68rem;
+  color: rgba(255,255,255,.45);
+  letter-spacing: .3px;
+}
+.toi-item { display: flex; align-items: center; gap: .55rem; }
+.toi-label { text-transform: uppercase; font-size: .6rem; }
+.toi-name { font-weight: 700; }
+.toi-prev-name, .toi-prev-label { color: #9ca3af; text-shadow: 0 0 6px rgba(156,163,175,.7); animation: toi-pulse-gray 1.8s ease-in-out infinite; }
+.toi-next-name, .toi-next-label { color: #86efac; text-shadow: 0 0 6px rgba(134,239,172,.7); animation: toi-pulse-green 1.8s ease-in-out infinite; }
+@keyframes toi-pulse-gray {
+  0%, 100% { transform: scale(1);    text-shadow: 0 0 4px rgba(156,163,175,.4); }
+  50%       { transform: scale(1.18); text-shadow: 0 0 12px rgba(156,163,175,.95); }
+}
+@keyframes toi-pulse-green {
+  0%, 100% { transform: scale(1);    text-shadow: 0 0 4px rgba(134,239,172,.4); }
+  50%       { transform: scale(1.18); text-shadow: 0 0 12px rgba(134,239,172,.95); }
+}
+.toi-arrow { color: rgba(255,255,255,.35); }
+.toi-current {
+  color: #facc15;
+  font-weight: 700;
+  font-size: .7rem;
+  text-transform: uppercase;
+  letter-spacing: .5px;
+}
 .player-hand {
   display: flex;
   gap: .3rem;

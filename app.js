@@ -971,6 +971,35 @@ function renderHand(state) {
       myTurn ? 'Tu turno — haz clic en una carta para jugar' : `Tu mano (${myHand.length})`;
   }
 
+  // Yellow glow when it's my turn
+  handEl.closest('.hand-area').classList.toggle('my-turn', myTurn);
+
+  // Turn order info bar
+  const toiEl = document.getElementById('turn-order-info');
+  const n = state?.players?.length || 0;
+  if (n >= 2) {
+    const curIdx = state.currentPlayerIndex;
+    const dir = state.direction ?? 1;
+    const prevIdx = ((curIdx - dir) % n + n) % n;
+    const nextIdx = ((curIdx + dir) % n + n) % n;
+    const prevName = esc(state.players[prevIdx]?.name || '—');
+    const nextName = esc(state.players[nextIdx]?.name || '—');
+    const curName  = esc(state.players[curIdx]?.name  || '—');
+    const center = myTurn
+      ? `<span class="toi-label" style="color:rgba(255,255,255,.3)">tu turno</span>`
+      : `<span class="toi-current">${curName}</span>`;
+    const leftItem  = dir >= 0
+      ? `<span class="toi-item"><span class="toi-arrow">←</span><span class="toi-label toi-prev-label">anterior</span><span class="toi-name toi-prev-name">${prevName}</span></span>`
+      : `<span class="toi-item"><span class="toi-arrow">←</span><span class="toi-label toi-next-label">siguiente</span><span class="toi-name toi-next-name">${nextName}</span></span>`;
+    const rightItem = dir >= 0
+      ? `<span class="toi-item"><span class="toi-name toi-next-name">${nextName}</span><span class="toi-label toi-next-label">siguiente</span><span class="toi-arrow">→</span></span>`
+      : `<span class="toi-item"><span class="toi-name toi-prev-name">${prevName}</span><span class="toi-label toi-prev-label">anterior</span><span class="toi-arrow">→</span></span>`;
+    toiEl.innerHTML = leftItem + center + rightItem;
+    toiEl.classList.remove('hidden');
+  } else {
+    toiEl.classList.add('hidden');
+  }
+
   document.getElementById('uno-btn').classList.add('hidden');
 }
 

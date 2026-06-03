@@ -940,9 +940,9 @@ function renderHand(state) {
     let isPlayable, onclick, extraClass = '';
     if (inDrawMode) {
       const isDrawn = i === drawnCardState.cardIdx;
-      isPlayable = isDrawn && drawnCardState.canPlay;
-      onclick = isPlayable ? `selectCard(${i})` : '';
       if (isDrawn) extraClass = ' drawn-fresh';
+      isPlayable = myTurn;
+      onclick = myTurn ? `selectCard(${i})` : '';
     } else {
       isPlayable = myTurn;
       onclick = myTurn ? `selectCard(${i})` : '';
@@ -964,8 +964,8 @@ function renderHand(state) {
 
   if (inDrawMode) {
     document.getElementById('hand-label').textContent = drawnCardState.canPlay
-      ? '¡Carta robada jugable! Juégala o pasa.'
-      : 'Carta robada no es jugable. Pasa el turno.';
+      ? '¡Carta robada jugable! Juega cualquier carta válida o pasa.'
+      : 'Carta robada no jugable. Juega una carta válida o pasa.';
   } else {
     document.getElementById('hand-label').textContent =
       myTurn ? 'Tu turno — haz clic en una carta para jugar' : `Tu mano (${myHand.length})`;
@@ -1000,7 +1000,7 @@ async function selectCard(index) {
   const card = myHand[index];
   if (!card) return;
 
-  if (drawnCardState !== null && (index !== drawnCardState.cardIdx || !drawnCardState.canPlay)) return;
+  if (drawnCardState !== null && index === drawnCardState.cardIdx && !drawnCardState.canPlay) return;
 
   if (card.value !== 'wild' && !isLiarCard(card) && !isActualPlayable(card, roomState)) {
     alert('No puedes jugar esta carta boca arriba. Elige otra o roba.');

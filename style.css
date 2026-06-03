@@ -519,7 +519,7 @@ input[type=text]:focus { border-color: var(--blue); }
 .game-log::-webkit-scrollbar { width: 4px; }
 .game-log::-webkit-scrollbar-track { background: transparent; }
 .game-log::-webkit-scrollbar-thumb { background: rgba(255,255,255,.2); border-radius: 2px; }
-.log-entry { font-size: 1rem; line-height: 1.4; padding: .65rem 0; flex-shrink: 0; color: rgba(255,255,255,.55); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.log-entry { font-size: 1rem; line-height: 1.4; padding: .65rem 0; flex-shrink: 0; color: rgba(255,255,255,.55); word-break: break-word; }
 .log-entry:first-child { font-size: 1.1rem; color: #fff; font-weight: 600; }
 .log-entry.log-lie   { color: #ff6b6b; text-shadow: 0 0 8px rgba(200,21,21,.9), 0 0 20px rgba(200,21,21,.5); }
 .log-entry.log-truth { color: #6bff8a; text-shadow: 0 0 8px rgba(24,154,32,.9), 0 0 20px rgba(24,154,32,.5); }
@@ -699,3 +699,53 @@ input[type=text]:focus { border-color: var(--blue); }
 }
 .winner-card h2 { font-size: 2rem; }
 .winner-name { font-size: 1.5rem; font-weight: 700; color: var(--yellow); }
+
+/* ---- MOBILE / TOUCH ---- */
+
+/* Eliminate 300ms tap delay */
+button, .card, .color-btn, .value-btn, .btn-copy, .draw-pile .card-back {
+  touch-action: manipulation;
+}
+
+/* Minimum touch target for buttons */
+.btn { min-height: 44px; }
+
+/* Prevent iOS auto-zoom on input focus (triggers when font-size < 16px) */
+@media (max-width: 768px) {
+  input[type=text] { font-size: 16px; }
+}
+
+/* Landing screen: allow scrolling on short phones */
+@media (max-height: 700px) {
+  #screen-landing {
+    overflow-y: auto;
+    justify-content: flex-start;
+    padding: 1.5rem 0;
+  }
+  .landing-card { max-height: none; }
+}
+
+/* Game layout: tighten up on short screens */
+@media (max-height: 780px) {
+  .opponents-row { min-height: 64px; padding: .3rem .5rem; }
+  .game-table    { gap: .5rem; padding: .3rem; }
+  .table-center  { gap: .4rem; }
+  .game-log      { height: 7rem; }
+  .hand-area     { padding: .3rem .5rem .5rem; }
+}
+
+@media (max-height: 650px) {
+  .game-log      { height: 4.5rem; }
+  .game-table    { gap: .25rem; }
+  .opponents-row { min-height: 52px; }
+  .pile-area     { gap: 1rem; }
+  .draw-pile .card-back, #top-card { width: 54px; height: 81px; }
+}
+
+/* Narrower phones: slightly smaller cards in hand */
+@media (max-width: 360px) {
+  .player-hand .card        { width: 50px; height: 75px; }
+  .card-label.center        { font-size: 1.2rem; }
+  #top-card                 { width: 60px; height: 90px; }
+  #top-card .card-label.center { font-size: 1.6rem; }
+}

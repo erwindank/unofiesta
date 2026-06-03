@@ -325,6 +325,13 @@ async function handleCreate() {
   showScreen('lobby');
 }
 
+function getUniqueName(desiredName, players) {
+  if (!players.some(p => p.name === desiredName)) return desiredName;
+  let n = 2;
+  while (players.some(p => p.name === desiredName + n)) n++;
+  return desiredName + n;
+}
+
 async function handleJoin() {
   const name = document.getElementById('player-name').value.trim();
   const code = document.getElementById('room-code-input').value.trim().toUpperCase();
@@ -335,21 +342,66 @@ async function handleJoin() {
   const snap = await db.collection('rooms').doc(code).get();
   if (!snap.exists) { showLandingError('Sala no encontrada'); return; }
   const data = snap.data();
-  if (data.status !== 'lobby') { showLandingError('La partida ya comenzó'); return; }
-  if (data.players.length >= 10) { showLandingError('Sala llena (máximo 10)'); return; }
+  if (data.status === 'ended') { showLandingError('La partida ya terminó'); return; }
 
-  if (!data.players.find(p => p.id === localUid)) {
-    await db.collection('rooms').doc(code).update({
-      players: firebase.firestore.FieldValue.arrayUnion({ id: localUid, name, cardCount: 0 })
-    });
+  if (data.status === 'lobby') {
+    if (data.players.length >= 10) { showLandingError('Sala llena (máximo 10)'); return; }
+
+    if (!data.players.find(p => p.id === localUid)) {
+      const uniqueName = getUniqueName(name, data.players);
+      localName = uniqueName;
+      await db.collection('rooms').doc(code).update({
+        players: firebase.firestore.FieldValue.arrayUnion({ id: localUid, name: uniqueName, cardCount: 0 })
+      });
+    } else {
+      localName = data.players.find(p => p.id === localUid).name;
+    }
+
+    currentRoomId = code;
+    sessionStorage.setItem('roomId', code);
+    sessionStorage.setItem('playerName', localName);
+    subscribeToRoom(code);
+    showScreen('lobby');
+
+  } else if (data.status === 'playing') {
+    const existingPlayer = data.players.find(p => p.name === name);
+
+    if (existingPlayer) {
+      // Reconnect: take over that player's slot with the current UID
+      const oldUid = existingPlayer.id;
+      if (oldUid !== localUid) {
+        const newPlayers = data.players.map(p =>
+          p.id === oldUid ? { ...p, id: localUid } : p
+        );
+        const hand = data.hands?.[oldUid] || [];
+        await db.collection('rooms').doc(code).update({
+          players: newPlayers,
+          [`hands.${localUid}`]: hand,
+          [`hands.${oldUid}`]: firebase.firestore.FieldValue.delete(),
+          lastActivity: firebase.firestore.FieldValue.serverTimestamp()
+        });
+      }
+      localName = name;
+    } else {
+      // New player joining mid-game: deal 7 cards from the draw pile
+      if (data.players.length >= 10) { showLandingError('Sala llena (máximo 10)'); return; }
+      const uniqueName = getUniqueName(name, data.players);
+      const { drawn, newDrawPile } = takeCards(data.drawPile, 7);
+      localName = uniqueName;
+      await db.collection('rooms').doc(code).update({
+        players: firebase.firestore.FieldValue.arrayUnion({ id: localUid, name: uniqueName, cardCount: 7 }),
+        [`hands.${localUid}`]: drawn,
+        drawPile: newDrawPile,
+        lastActivity: firebase.firestore.FieldValue.serverTimestamp()
+      });
+    }
+
+    currentRoomId = code;
+    sessionStorage.setItem('roomId', code);
+    sessionStorage.setItem('playerName', localName);
+    subscribeToRoom(code);
+    showScreen('game');
   }
-
-  localName = name;
-  currentRoomId = code;
-  sessionStorage.setItem('roomId', code);
-  sessionStorage.setItem('playerName', name);
-  subscribeToRoom(code);
-  showScreen('lobby');
 }
 
 async function tryRejoin(roomId) {

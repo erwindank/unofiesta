@@ -657,7 +657,11 @@ function renderStatus(state) {
   const current = state.players[state.currentPlayerIndex];
 
   const myTurn = isMyTurn(state);
-  el.classList.toggle('my-turn', myTurn && !state.challengeOpen);
+  el.classList.toggle('my-turn',    myTurn && !state.challengeOpen);
+  el.classList.toggle('other-turn', !myTurn && !state.challengeOpen);
+
+  const dirEl = document.getElementById('direction-indicator');
+  if (dirEl) dirEl.textContent = state.direction === 1 ? '↻' : '↺';
 
   if (state.challengeOpen && state.lastClaimedCard) {
     const lp = state.players.find(p => p.id === state.lastPlayerId);

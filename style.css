@@ -218,7 +218,16 @@ input[type=text]:focus { border-color: var(--blue); }
   min-width: 72px;
   transition: background .2s;
 }
-.opponent.active-player { background: rgba(255,255,255,.12); outline: 2px solid rgba(255,255,255,.8); }
+.opponent.active-player {
+  background: rgba(255,210,30,.12);
+  outline: 2px solid rgba(255,210,30,.95);
+  box-shadow: 0 0 14px 4px rgba(255,190,0,.6), 0 0 30px rgba(255,150,0,.35);
+  animation: player-glow 1s ease-in-out infinite alternate;
+}
+@keyframes player-glow {
+  from { box-shadow: 0 0 10px 3px rgba(255,190,0,.45), 0 0 22px rgba(255,150,0,.25); }
+  to   { box-shadow: 0 0 22px 7px rgba(255,200,0,.75), 0 0 48px rgba(255,150,0,.5); }
+}
 .opponent-name { font-size: .7rem; font-weight: 600; white-space: nowrap; max-width: 80px; overflow: hidden; text-overflow: ellipsis; }
 .opponent-cards { display: flex; gap: 2px; flex-wrap: wrap; justify-content: center; }
 .opponent-count { font-size: .65rem; color: rgba(255,255,255,.6); }
@@ -551,6 +560,34 @@ input[type=text]:focus { border-color: var(--blue); }
 @keyframes pulse-turn {
   from { transform: scale(1);   opacity: .9; }
   to   { transform: scale(1.05); opacity: 1; }
+}
+
+.game-status.other-turn {
+  font-size: 1.15rem;
+  color: #a8c8ff;
+  text-shadow: 0 0 10px rgba(100,160,255,.85), 0 0 24px rgba(80,120,255,.5);
+  animation: pulse-other-turn .9s ease-in-out infinite alternate;
+}
+
+@keyframes pulse-other-turn {
+  from { transform: scale(1);    opacity: .75; }
+  to   { transform: scale(1.18); opacity: 1;   }
+}
+
+/* Direction indicator */
+.direction-indicator {
+  font-size: 2.8rem;
+  line-height: 1;
+  color: rgba(160,200,255,.85);
+  text-shadow: 0 0 14px rgba(100,160,255,.9), 0 0 32px rgba(80,120,255,.6);
+  animation: dir-pulse 1.6s ease-in-out infinite alternate;
+  user-select: none;
+  pointer-events: none;
+}
+
+@keyframes dir-pulse {
+  from { transform: scale(1);    opacity: .7; text-shadow: 0 0 10px rgba(100,160,255,.7), 0 0 22px rgba(80,120,255,.4); }
+  to   { transform: scale(1.12); opacity: 1;  text-shadow: 0 0 20px rgba(100,180,255,1),  0 0 44px rgba(80,140,255,.75); }
 }
 
 /* Challenge area */

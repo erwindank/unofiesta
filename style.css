@@ -568,6 +568,8 @@ input[type=text]:focus { border-color: var(--blue); }
 .challenge-area p { font-size: .85rem; color: rgba(255,255,255,.85); line-height: 1.4; }
 .challenge-btns { display: flex; gap: .5rem; }
 .challenge-btns .btn { flex: 1; }
+.believe-votes  { font-size: .75rem; color: #7dffb0; margin-top: .25rem; }
+.believe-waiting { font-size: .72rem; color: rgba(255,255,255,.55); margin-top: .1rem; }
 
 /* Game log */
 .game-log {

@@ -682,8 +682,28 @@ function renderChallengeArea(state) {
   if (showChallenge && state.lastClaimedCard) {
     const c  = state.lastClaimedCard;
     const lp = state.players.find(p => p.id === state.lastPlayerId);
+    const believes = state.challengeBelieves || [];
+    const alreadyBelieved = believes.includes(localUid);
+
+    // Build "waiting on" list
+    const eligible = state.players.filter(p => p.id !== state.lastPlayerId);
+    const waiting  = eligible.filter(p => !believes.includes(p.id));
+    const believed = eligible.filter(p => believes.includes(p.id));
+
+    let believeStatus = '';
+    if (believed.length > 0) {
+      believeStatus = `<div class="believe-votes">✓ ${believed.map(p => esc(p.name)).join(', ')} lo cree${believed.length > 1 ? 'n' : ''}</div>`;
+    }
+    if (waiting.length > 0 && believed.length > 0) {
+      believeStatus += `<div class="believe-waiting">Esperando: ${waiting.map(p => esc(p.name)).join(', ')}</div>`;
+    }
+
     txt.innerHTML =
-      `${esc(lp?.name || '?')} dice que jugó ${cardStatusHTML(c)}. ¿Lo crees?`;
+      `${esc(lp?.name || '?')} dice que jugó ${cardStatusHTML(c)}. ¿Lo crees?${believeStatus}`;
+
+    // Show/hide the believe button based on whether current user already voted
+    const believeBtn = document.getElementById('believe-btn');
+    if (believeBtn) believeBtn.classList.toggle('hidden', alreadyBelieved);
   }
 }
 
@@ -1389,6 +1409,7 @@ async function doPlayCard(actualCard, claimedCard, cardIndex) {
     prevTopColor: state.topColor,
     prevTopValue: state.topValue,
     challengeOpen: !won,
+    challengeBelieves: won ? firebase.firestore.FieldValue.delete() : [],
     unoCallRequired: (newHand.length === 1 && !won)
       ? { playerId: localUid, playerName: localName }
       : firebase.firestore.FieldValue.delete(),
@@ -1433,7 +1454,7 @@ async function handleChallenge() {
       p.id === state.lastPlayerId ? { ...p, cardCount: hands[p.id].length } : p
     );
     log = addLog(log,
-      `🚨 ¡Descubierto! ${liar?.name} mintió (era ${cardLogName(actual)}). Recuperó la carta y robó ${drawn.length} más.`
+      `🚨 ¡${localName} descubrió a ${liar?.name}! Mintió (era ${cardLogName(actual)}). ${liar?.name} recuperó la carta y robó ${drawn.length} más.`
     );
 
     await db.collection('rooms').doc(currentRoomId).update({
@@ -1443,6 +1464,7 @@ async function handleChallenge() {
       topColor: state.prevTopColor,
       topValue: state.prevTopValue,
       challengeOpen: false,
+      challengeBelieves: firebase.firestore.FieldValue.delete(),
       lastActualCard: null,
       lastClaimedCard: null,
       currentPlayerIndex: nextPlayerIndex(state),
@@ -1453,7 +1475,7 @@ async function handleChallenge() {
   } else {
     // Honesto: el desafiante roba 1 carta y se aplica el efecto
     log = addLog(log,
-      `✓ ${liar?.name} dijo la verdad (${cardLogName(actual)}).`
+      `✓ ${localName} acusó a ${liar?.name}, que dijo la verdad (${cardLogName(actual)}). ${localName} roba 1.`
     );
 
     if (claimed.value === '0') {
@@ -1471,6 +1493,7 @@ async function handleChallenge() {
         hands: postHands,
         players: postPlayers,
         challengeOpen: false,
+        challengeBelieves: firebase.firestore.FieldValue.delete(),
         lastActualCard: null,
         lastClaimedCard: null,
         log,
@@ -1486,6 +1509,7 @@ async function handleChallenge() {
         ...advanced.changes,
         pendingPenaltyDraw: { playerId: localUid, count: 1 },
         challengeOpen: false,
+        challengeBelieves: firebase.firestore.FieldValue.delete(),
         lastActualCard: null,
         lastClaimedCard: null,
         log,
@@ -1505,6 +1529,7 @@ async function handleChallenge() {
       await db.collection('rooms').doc(currentRoomId).update({
         ...advanced.changes,
         challengeOpen: false,
+        challengeBelieves: firebase.firestore.FieldValue.delete(),
         lastActualCard: null,
         lastClaimedCard: null,
         log,
@@ -1522,21 +1547,39 @@ async function handleBelieve() {
   const state = roomState;
   if (!state?.challengeOpen) return;
 
-  const lp = state.players.find(p => p.id === state.lastPlayerId);
-  const advanced = applyEffectsAndAdvance(state);
-  const log = addLog(
-    addLog(state.log, `${localName} confía en ${lp?.name}.`),
-    advanced.logExtra
-  );
+  const believes = state.challengeBelieves || [];
+  if (believes.includes(localUid)) return; // already voted
 
-  await db.collection('rooms').doc(currentRoomId).update({
-    ...advanced.changes,
-    challengeOpen: false,
-    lastActualCard: null,
-    lastClaimedCard: null,
-    log,
-    lastActivity: firebase.firestore.FieldValue.serverTimestamp()
-  });
+  const newBelieves = [...believes, localUid];
+  const lp = state.players.find(p => p.id === state.lastPlayerId);
+
+  // Eligible voters = all players except the one who played the card
+  const eligible = state.players.filter(p => p.id !== state.lastPlayerId);
+  const allVoted = eligible.every(p => newBelieves.includes(p.id));
+
+  let log = addLog(state.log, `${localName} confía en ${lp?.name}.`);
+
+  if (allVoted) {
+    // Everyone has voted "Lo creo" — resolve the challenge
+    const advanced = applyEffectsAndAdvance(state);
+    log = addLog(log, advanced.logExtra);
+    await db.collection('rooms').doc(currentRoomId).update({
+      ...advanced.changes,
+      challengeOpen: false,
+      challengeBelieves: firebase.firestore.FieldValue.delete(),
+      lastActualCard: null,
+      lastClaimedCard: null,
+      log,
+      lastActivity: firebase.firestore.FieldValue.serverTimestamp()
+    });
+  } else {
+    // Still waiting for other players
+    await db.collection('rooms').doc(currentRoomId).update({
+      challengeBelieves: newBelieves,
+      log,
+      lastActivity: firebase.firestore.FieldValue.serverTimestamp()
+    });
+  }
 }
 
 // ============================================================

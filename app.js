@@ -817,7 +817,12 @@ function renderClaimPicker() {
   if (selectedActualCard?.value === 'wild') {
     valuePicker.innerHTML = '';
   } else {
-    valuePicker.innerHTML = ALL_VALUES.map(v =>
+    // Wild cards are always face-up — liar cards can never be declared as any wild.
+    // Wild4 playing as wild4 is fine; wild4 claiming to be a regular wild is not.
+    const allowedValues = selectedActualCard?.value === 'wild4'
+      ? ALL_VALUES.filter(v => v !== 'wild')
+      : ALL_VALUES.filter(v => !WILDS.includes(v));
+    valuePicker.innerHTML = allowedValues.map(v =>
       `<button class="value-btn ${claimValue === v ? 'selected' : ''}"
         onclick="setClaimValue('${v}')">${VALUE_LABEL[v]}</button>`
     ).join('');
@@ -826,10 +831,11 @@ function renderClaimPicker() {
 
 function setClaimColor(color) { claimColor = color; renderClaimPicker(); }
 function setClaimValue(value) {
-  if (selectedActualCard?.value === 'wild' && value !== 'wild') return;
-  if (selectedActualCard && !isLiarCard(selectedActualCard) && selectedActualCard.value !== 'wild') return;
+  if (selectedActualCard?.value === 'wild') return;
+  if (value === 'wild') return;
+  if (selectedActualCard?.value !== 'wild4' && WILDS.includes(value)) return;
+  if (selectedActualCard && !isLiarCard(selectedActualCard)) return;
   claimValue = value;
-  if (WILDS.includes(value) && claimColor === null) claimColor = 'red';
   renderClaimPicker();
 }
 

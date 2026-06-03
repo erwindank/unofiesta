@@ -35,6 +35,10 @@ const VALUE_LABEL = {
   '5':'5','6':'6','7':'7','8':'8','9':'9',
   skip:'⊘', reverse:'↺', draw2:'+2', wild:'C', wild4:'+4'
 };
+const CARD_POINTS = {
+  '0':0,'1':1,'2':2,'3':3,'4':4,'5':5,'6':6,'7':7,'8':8,'9':9,
+  skip:20, reverse:20, draw2:20, wild:50, wild4:50
+};
 const COLOR_NAME = { red:'Rojo', yellow:'Amarillo', green:'Verde', blue:'Azul', black:'Comodín' };
 
 function wildCenterHTML(value) {
@@ -110,6 +114,31 @@ let drawnCardState = null; // { cardIdx, canPlay } — set after drawing, cleare
 
 function isLiarCard(card) {
   return card && card.liar === true;
+}
+
+function handPoints(hand) {
+  return (hand || []).reduce((sum, c) => sum + (CARD_POINTS[c.value] || 0), 0);
+}
+
+function computeStandings(state) {
+  return (state.players || [])
+    .map(p => {
+      const hand = state.hands?.[p.id] || [];
+      return { id: p.id, name: p.name, cards: hand.length, points: handPoints(hand) };
+    })
+    .sort((a, b) => a.cards - b.cards || a.points - b.points);
+}
+
+function determineWinner(state) {
+  let best = null, bestCards = Infinity, bestPoints = Infinity;
+  for (const p of state.players) {
+    const hand = state.hands?.[p.id] || [];
+    const cards = hand.length, points = handPoints(hand);
+    if (cards < bestCards || (cards === bestCards && points < bestPoints)) {
+      bestCards = cards; bestPoints = points; best = p;
+    }
+  }
+  return { winner: best?.id, winnerName: best?.name };
 }
 
 function isActualPlayable(card, state) {
@@ -315,11 +344,25 @@ function onRoomUpdate(state) {
     showScreen('lobby');
     renderLobby(state);
   } else if (state.status === 'playing') {
+    // Check if all players agreed to end — any client that detects it triggers the update;
+    // Firestore's atomic write means duplicate triggers just overwrite with the same result.
+    const votes = state.endVotes || [];
+    if (votes.length >= state.players.length && state.players.length > 0) {
+      const result = determineWinner(state);
+      db.collection('rooms').doc(currentRoomId).update({
+        status: 'ended',
+        winner: result.winner,
+        winnerName: result.winnerName,
+        winnerReason: 'vote',
+        log: addLog(state.log, `Partida terminada por acuerdo. ¡${result.winnerName} gana!`)
+      }).catch(() => {});
+      return;
+    }
     showScreen('game');
     renderGame(state);
   } else if (state.status === 'ended') {
     showScreen('winner');
-    document.getElementById('winner-name').textContent = state.winnerName || '?';
+    renderWinner(state);
   }
 }
 
@@ -391,6 +434,8 @@ async function handleStart() {
     log: [`¡Partida iniciada! ${esc(players[0].name)} va primero.`],
     winner: null,
     winnerName: null,
+    winnerReason: null,
+    endVotes: [],
     lastActivity: firebase.firestore.FieldValue.serverTimestamp()
   });
 }
@@ -411,6 +456,7 @@ function renderGame(state) {
   renderUnoCallOverlay(state);
   renderSevenSwapOverlay(state);
   renderTurnActions(state);
+  renderEndVoteStatus(state);
 
   const myTurn = isMyTurn(state) && !state.challengeOpen;
   const canDraw = myTurn && drawnCardState === null;
@@ -1323,6 +1369,8 @@ async function backToLobby() {
     status: 'lobby',
     winner: null,
     winnerName: null,
+    winnerReason: null,
+    endVotes: [],
     hands: {},
     drawPile: [],
     log: [],
@@ -1331,4 +1379,205 @@ async function backToLobby() {
     lastClaimedCard: null,
     players: roomState.players.map(p => ({ ...p, cardCount: 0 }))
   });
+}
+
+// ============================================================
+// LEAVE GAME
+// ============================================================
+
+async function handleLeaveGame() {
+  if (!roomState || !currentRoomId) { showScreen('landing'); return; }
+  if (!confirm('¿Seguro que quieres salir de la partida?')) return;
+
+  const state = roomState;
+  const roomId = currentRoomId;
+  const myIdx = state.players.findIndex(p => p.id === localUid);
+  const newPlayers = state.players.filter(p => p.id !== localUid);
+  const newHands = { ...state.hands };
+  delete newHands[localUid];
+  const newEndVotes = (state.endVotes || []).filter(id => id !== localUid);
+  const leaveLog = addLog(state.log, `${localName} salió de la partida.`);
+
+  if (roomUnsub) { roomUnsub(); roomUnsub = null; }
+  sessionStorage.clear();
+  currentRoomId = null;
+  roomState = null;
+  showScreen('landing');
+
+  if (newPlayers.length === 0) return;
+
+  if (newPlayers.length === 1) {
+    const winner = newPlayers[0];
+    await db.collection('rooms').doc(roomId).update({
+      players: newPlayers,
+      hands: newHands,
+      status: 'ended',
+      winner: winner.id,
+      winnerName: winner.name,
+      winnerReason: 'lastPlayer',
+      challengeOpen: false,
+      lastActualCard: null,
+      lastClaimedCard: null,
+      sevenSwapPending: firebase.firestore.FieldValue.delete(),
+      unoCallRequired: firebase.firestore.FieldValue.delete(),
+      endVotes: newEndVotes,
+      log: addLog(leaveLog, `¡${winner.name} gana por ser el último jugador!`)
+    });
+    return;
+  }
+
+  // Adjust currentPlayerIndex: remove my slot and keep the "next to play" player correct.
+  let newIdx = state.currentPlayerIndex;
+  if (myIdx < newIdx) {
+    newIdx = newIdx - 1;
+  } else if (myIdx === newIdx) {
+    newIdx = newIdx % newPlayers.length;
+  }
+
+  const update = {
+    players: newPlayers,
+    hands: newHands,
+    currentPlayerIndex: newIdx,
+    challengeOpen: false,
+    lastActualCard: null,
+    lastClaimedCard: null,
+    sevenSwapPending: firebase.firestore.FieldValue.delete(),
+    unoCallRequired: firebase.firestore.FieldValue.delete(),
+    endVotes: newEndVotes,
+    log: leaveLog,
+    lastActivity: firebase.firestore.FieldValue.serverTimestamp()
+  };
+
+  if (state.hostId === localUid) update.hostId = newPlayers[0].id;
+
+  await db.collection('rooms').doc(roomId).update(update);
+}
+
+// ============================================================
+// END GAME VOTE
+// ============================================================
+
+async function handleEndGameVote() {
+  const state = roomState;
+  if (!state || state.status !== 'playing') return;
+
+  const votes = state.endVotes || [];
+  const hasVoted = votes.includes(localUid);
+
+  if (hasVoted) {
+    const log = addLog(state.log, `${localName} retiró su voto para terminar.`);
+    await db.collection('rooms').doc(currentRoomId).update({
+      endVotes: firebase.firestore.FieldValue.arrayRemove(localUid),
+      log,
+      lastActivity: firebase.firestore.FieldValue.serverTimestamp()
+    });
+  } else {
+    const log = addLog(state.log,
+      `${localName} propone terminar (${votes.length + 1}/${state.players.length}).`);
+    await db.collection('rooms').doc(currentRoomId).update({
+      endVotes: firebase.firestore.FieldValue.arrayUnion(localUid),
+      log,
+      lastActivity: firebase.firestore.FieldValue.serverTimestamp()
+    });
+  }
+}
+
+function renderEndVoteStatus(state) {
+  const votes = state.endVotes || [];
+  const statusEl = document.getElementById('end-vote-status');
+  const btn = document.getElementById('end-game-btn');
+  const hasVoted = votes.includes(localUid);
+
+  statusEl.textContent = votes.length > 0
+    ? `${votes.length}/${state.players.length} quieren terminar`
+    : '';
+
+  if (btn) {
+    btn.textContent = hasVoted ? 'Retirar voto' : 'Terminar';
+    btn.classList.toggle('btn-voted', hasVoted);
+  }
+}
+
+// ============================================================
+// WINNER SCREEN
+// ============================================================
+
+function renderWinner(state) {
+  const reason = state.winnerReason;
+  const titleEl = document.getElementById('winner-title');
+  const nameEl  = document.getElementById('winner-name');
+  const standingsEl = document.getElementById('winner-standings');
+
+  document.getElementById('join-another-form')?.classList.add('hidden');
+  document.getElementById('winner-error')?.classList.add('hidden');
+
+  if (reason === 'vote') {
+    titleEl.textContent = '🤝 ¡Partida terminada!';
+    nameEl.textContent  = `${state.winnerName || '?'} ganó con menos cartas`;
+  } else if (reason === 'lastPlayer') {
+    titleEl.textContent = '🏆 ¡Último en pie!';
+    nameEl.textContent  = state.winnerName || '?';
+  } else {
+    titleEl.textContent = '🎉 ¡Ganador!';
+    nameEl.textContent  = state.winnerName || '?';
+  }
+
+  if (reason === 'vote' && state.hands && state.players?.length) {
+    const standings = computeStandings(state);
+    standingsEl.innerHTML = standings.map((s, i) =>
+      `<div class="standing-row ${s.id === state.winner ? 'winner-row' : ''}">
+        <span class="standing-rank">#${i + 1}</span>
+        <span class="standing-name">${esc(s.name)}</span>
+        <span class="standing-stats">${s.cards} cartas · ${s.points} pts</span>
+      </div>`
+    ).join('');
+    standingsEl.classList.remove('hidden');
+  } else {
+    standingsEl.classList.add('hidden');
+  }
+}
+
+function showJoinAnother() {
+  document.getElementById('join-another-form').classList.toggle('hidden');
+}
+
+async function handleJoinAnother() {
+  const code = document.getElementById('winner-room-code').value.trim().toUpperCase();
+  if (code.length !== 6) { showWinnerError('Introduce el código de sala de 6 caracteres'); return; }
+  if (!localUid) { showWinnerError('Aún conectando… intenta de nuevo'); return; }
+
+  const snap = await db.collection('rooms').doc(code).get();
+  if (!snap.exists) { showWinnerError('Sala no encontrada'); return; }
+  const data = snap.data();
+  if (data.status !== 'lobby') { showWinnerError('La partida ya comenzó'); return; }
+  if (data.players.length >= 10) { showWinnerError('Sala llena (máximo 10)'); return; }
+
+  if (roomUnsub) { roomUnsub(); roomUnsub = null; }
+
+  if (!data.players.find(p => p.id === localUid)) {
+    await db.collection('rooms').doc(code).update({
+      players: firebase.firestore.FieldValue.arrayUnion({ id: localUid, name: localName, cardCount: 0 })
+    });
+  }
+
+  currentRoomId = code;
+  sessionStorage.setItem('roomId', code);
+  sessionStorage.setItem('playerName', localName);
+  subscribeToRoom(code);
+  showScreen('lobby');
+}
+
+function showWinnerError(msg) {
+  const el = document.getElementById('winner-error');
+  el.textContent = msg;
+  el.classList.remove('hidden');
+  setTimeout(() => el.classList.add('hidden'), 3500);
+}
+
+function returnToMain() {
+  if (roomUnsub) { roomUnsub(); roomUnsub = null; }
+  currentRoomId = null;
+  roomState = null;
+  sessionStorage.clear();
+  showScreen('landing');
 }

@@ -57,6 +57,15 @@
 <!-- GAME -->
 <div id="screen-game" class="screen">
 
+  <!-- Game top bar -->
+  <div class="game-topbar">
+    <span id="end-vote-status" class="end-vote-status"></span>
+    <div class="game-topbar-actions">
+      <button class="btn btn-ghost btn-sm" id="end-game-btn" onclick="handleEndGameVote()">Terminar</button>
+      <button class="btn btn-danger btn-sm" onclick="handleLeaveGame()">Salir</button>
+    </div>
+  </div>
+
   <!-- Opponents -->
   <div id="opponents-row" class="opponents-row"></div>
 
@@ -119,9 +128,20 @@
 <!-- WINNER -->
 <div id="screen-winner" class="screen">
   <div class="winner-card">
-    <h2>🎉 ¡Ganador!</h2>
+    <h2 id="winner-title">🎉 ¡Ganador!</h2>
     <p id="winner-name" class="winner-name"></p>
-    <button class="btn btn-primary" onclick="backToLobby()">Jugar de nuevo</button>
+    <div id="winner-standings" class="winner-standings hidden"></div>
+    <div class="winner-actions">
+      <button class="btn btn-primary" onclick="backToLobby()">Jugar de nuevo</button>
+      <button class="btn btn-secondary" onclick="showJoinAnother()">Unirse a otra sala</button>
+      <button class="btn btn-ghost" onclick="returnToMain()">Volver al inicio</button>
+    </div>
+    <div id="join-another-form" class="join-another-form hidden">
+      <input type="text" id="winner-room-code" placeholder="Código de sala (p.ej. XK7M2P)" maxlength="6"
+        autocomplete="off" oninput="this.value=this.value.toUpperCase()">
+      <button class="btn btn-primary" onclick="handleJoinAnother()">Unirse</button>
+    </div>
+    <div id="winner-error" class="error hidden"></div>
   </div>
 </div>
 

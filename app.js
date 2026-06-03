@@ -575,11 +575,8 @@ function renderChallengeArea(state) {
   const area = document.getElementById('challenge-area');
   const txt  = document.getElementById('challenge-text');
 
-  const nextIdx = nextPlayerIndex(state);
-  const isNextPlayer = state.players[nextIdx]?.id === localUid;
   const showChallenge = state.challengeOpen &&
-    state.lastPlayerId !== localUid &&
-    isNextPlayer;
+    state.lastPlayerId !== localUid;
 
   area.classList.toggle('hidden', !showChallenge);
 
@@ -665,7 +662,14 @@ async function selectCard(index) {
 
   selectedCardIdx = index;
   selectedActualCard = card;
-  claimColor = card.color === 'black' ? roomState.topColor || 'red' : card.color;
+  if (card.color === 'black') {
+    claimColor = roomState.topColor || 'red';
+  } else if (isLiarCard(card) && card.color !== roomState.topColor && card.value !== roomState.topValue) {
+    // Default to a valid claim: use top color so the claim matches by color
+    claimColor = roomState.topColor || card.color;
+  } else {
+    claimColor = card.color;
+  }
   claimValue = card.value;
 
   const preview = document.getElementById('actual-card-preview');
@@ -1008,7 +1012,9 @@ async function handleChallenge() {
   const actual  = state.lastActualCard;
   const claimed = state.lastClaimedCard;
   const liar    = state.players.find(p => p.id === state.lastPlayerId);
-  const isLie   = actual.color !== claimed.color || actual.value !== claimed.value;
+  // For wild cards (black), color is a free choice — only compare value
+  const isLie   = actual.value !== claimed.value ||
+    (actual.color !== 'black' && actual.color !== claimed.color);
 
   let { hands, players, drawPile } = state;
   let log = state.log;

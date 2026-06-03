@@ -808,6 +808,83 @@ input[type=text]:focus { border-color: var(--blue); }
 .winner-actions { display: flex; flex-direction: column; gap: .5rem; width: 100%; }
 .join-another-form { display: flex; flex-direction: column; gap: .5rem; }
 
+/* ---- WILD CHALLENGE OVERLAY ---- */
+.wild-challenge-panel {
+  position: fixed;
+  inset: 0;
+  z-index: 80;
+  background: rgba(0,0,0,.82);
+  backdrop-filter: blur(6px);
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+}
+.wild-challenge-panel.hidden { display: none; }
+.wc-inner {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 16px 16px 0 0;
+  padding: 1.25rem 1rem 1.5rem;
+  margin-top: auto;
+  display: flex;
+  flex-direction: column;
+  gap: .9rem;
+  max-height: 88dvh;
+  overflow-y: auto;
+}
+.wc-title {
+  font-size: 1.1rem;
+  font-weight: 700;
+  text-align: center;
+  line-height: 1.5;
+}
+.wc-body {
+  display: flex;
+  flex-direction: column;
+  gap: .6rem;
+}
+.wc-body p { font-size: .88rem; color: rgba(255,255,255,.7); text-align: center; }
+.wc-body ul { list-style: none; display: flex; flex-direction: column; gap: .25rem; padding: 0; }
+.wc-body li { text-align: center; color: rgba(255,255,255,.55); font-size: .85rem; }
+.wc-body li.submitted { color: #6bff8a; }
+.wc-cards-row {
+  display: flex;
+  gap: .5rem;
+  overflow-x: auto;
+  justify-content: center;
+  flex-wrap: wrap;
+  padding: .25rem 0;
+}
+.wc-card-slot { text-align: center; display: flex; flex-direction: column; gap: .3rem; align-items: center; }
+.wc-card-slot span { font-size: .7rem; color: rgba(255,255,255,.55); }
+.wc-accuse-list {
+  display: flex;
+  flex-direction: column;
+  gap: .4rem;
+}
+.wc-actions {
+  display: flex;
+  flex-direction: column;
+  gap: .5rem;
+}
+.wc-hand {
+  display: flex;
+  gap: .35rem;
+  overflow-x: auto;
+  padding: .25rem 0;
+  scrollbar-width: none;
+}
+.wc-hand::-webkit-scrollbar { display: none; }
+.wc-hand .card { flex-shrink: 0; }
+.wc-hand .card.wc-disabled { opacity: .35; cursor: default; }
+.wc-hand .card.wc-disabled:hover { transform: none; }
+.wc-color-row {
+  display: flex;
+  gap: .75rem;
+  justify-content: center;
+  padding: .25rem 0;
+}
+
 /* ---- MOBILE / TOUCH ---- */
 
 /* Eliminate 300ms tap delay */

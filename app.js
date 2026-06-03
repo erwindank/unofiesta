@@ -714,13 +714,18 @@ function renderGame(state) {
   const canDraw = myTurn && drawnCardState === null && !state.wildChallenge;
   document.getElementById('draw-pile-area').style.opacity = canDraw ? '1' : '0.5';
 
-  const myHand     = state.hands?.[localUid] || [];
-  const hasGenuine = myHand.some(c => c.value === 'wild' || (!isLiarCard(c) && isActualPlayable(c, state)));
-  const hasLiar    = myHand.some(c => isLiarCard(c));
-  const noPlayable = canDraw && !hasGenuine && !hasLiar;
-  const onlyLiar   = canDraw && !hasGenuine && hasLiar;
-  document.getElementById('draw-pile-area').classList.toggle('must-draw', noPlayable);
-  document.getElementById('draw-pile-area').classList.toggle('could-lie', onlyLiar);
+  const myHand           = state.hands?.[localUid] || [];
+  const hasGenuine       = myHand.some(c => c.value === 'wild' || (!isLiarCard(c) && isActualPlayable(c, state)));
+  const hasMatchingLiar  = myHand.some(c => isLiarCard(c) && isActualPlayable(c, state));
+  const hasAnyLiar       = myHand.some(c => isLiarCard(c));
+  const noPlayable       = canDraw && !hasGenuine && !hasAnyLiar;
+  const matchingLiarOnly = canDraw && !hasGenuine && hasMatchingLiar;
+  const nonMatchingLiar  = canDraw && !hasGenuine && !hasMatchingLiar && hasAnyLiar;
+  const normalDraw       = canDraw && hasGenuine;
+  document.getElementById('draw-pile-area').classList.toggle('can-draw',      normalDraw);
+  document.getElementById('draw-pile-area').classList.toggle('must-draw',     noPlayable);
+  document.getElementById('draw-pile-area').classList.toggle('matching-liar', matchingLiarOnly);
+  document.getElementById('draw-pile-area').classList.toggle('could-lie',     nonMatchingLiar);
 }
 
 function renderTurnActions(state) {
@@ -1918,16 +1923,60 @@ function applyEffectsAndAdvance(state) {
 // DRAW CARD
 // ============================================================
 
+function showDrawConfirm(accent, icon, title, message) {
+  return new Promise(resolve => {
+    const card   = document.getElementById('draw-confirm-card');
+    card.className = `draw-confirm-card accent-${accent}`;
+    document.getElementById('draw-confirm-icon').textContent  = icon;
+    document.getElementById('draw-confirm-title').textContent = title;
+    document.getElementById('draw-confirm-msg').textContent   = message;
+    const modal  = document.getElementById('draw-confirm-modal');
+    const okBtn  = document.getElementById('draw-confirm-ok');
+    const canBtn = document.getElementById('draw-confirm-cancel');
+    modal.classList.remove('hidden');
+    function done(result) {
+      modal.classList.add('hidden');
+      okBtn.removeEventListener('click', onOk);
+      canBtn.removeEventListener('click', onCancel);
+      resolve(result);
+    }
+    function onOk()     { done(true);  }
+    function onCancel() { done(false); }
+    okBtn.addEventListener('click', onOk);
+    canBtn.addEventListener('click', onCancel);
+  });
+}
+
 async function handleDraw() {
   const state = roomState;
   if (!isMyTurn(state) || state.challengeOpen || state.wildChallenge) return;
   if (drawnCardState !== null) return;
 
-  const myHand     = state.hands?.[localUid] || [];
-  const hasGenuine = myHand.some(c => c.value === 'wild' || (!isLiarCard(c) && isActualPlayable(c, state)));
-  const hasLiar    = myHand.some(c => isLiarCard(c));
-  if (!hasGenuine && hasLiar) {
-    if (!confirm('Tienes cartas de mentira que puedes jugar. ¿Quieres robar de todas formas?')) return;
+  const myHand          = state.hands?.[localUid] || [];
+  const hasGenuine      = myHand.some(c => c.value === 'wild' || (!isLiarCard(c) && isActualPlayable(c, state)));
+  const hasMatchingLiar = myHand.some(c => isLiarCard(c) && isActualPlayable(c, state));
+  const hasAnyLiar      = myHand.some(c => isLiarCard(c));
+  if (hasGenuine) {
+    const ok = await showDrawConfirm(
+      'white', '✋',
+      'Tienes cartas jugables',
+      'Tienes cartas que puedes jugar en este turno. ¿Quieres robar de todas formas?'
+    );
+    if (!ok) return;
+  } else if (!hasGenuine && hasMatchingLiar) {
+    const ok = await showDrawConfirm(
+      'yellow', '🃏',
+      '¡Tienes cartas jugables!',
+      'Tienes cartas de mentira que coinciden con el descarte y puedes jugarlas. ¿Seguro que quieres robar de todas formas?'
+    );
+    if (!ok) return;
+  } else if (!hasGenuine && !hasMatchingLiar && hasAnyLiar) {
+    const ok = await showDrawConfirm(
+      'red', '🎴',
+      'Solo tienes cartas de mentira',
+      'No tienes cartas jugables honestamente, pero puedes jugar una carta de mentira. ¿Quieres robar de todas formas?'
+    );
+    if (!ok) return;
   }
 
   const { drawn, newDrawPile } = takeCards(state.drawPile, 1);

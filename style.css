@@ -337,6 +337,22 @@ input[type=text]:focus { border-color: var(--blue); }
   text-shadow: 0 0 6px rgba(220,0,0,.8), 0 1px 3px rgba(0,0,0,.9);
 }
 
+/* Normal draw state: subtle white glow hint */
+@keyframes draw-pile-glow-white {
+  0%, 100% { box-shadow: 0 0 6px 1px rgba(255,255,255,.15), 2px 4px 14px rgba(0,0,0,.6); transform: scale(1); }
+  50%       { box-shadow: 0 0 14px 4px rgba(255,255,255,.3), 2px 4px 14px rgba(0,0,0,.6); transform: scale(1.04); }
+}
+@keyframes robar-pulse-white {
+  0%, 100% { color: rgba(255,255,255,.55); }
+  50%       { color: rgba(255,255,255,.9); text-shadow: 0 0 8px rgba(255,255,255,.4); }
+}
+#draw-pile-area.can-draw .card-back {
+  animation: draw-pile-glow-white 1.4s ease-in-out infinite;
+}
+#draw-pile-area.can-draw .pile-label {
+  animation: robar-pulse-white 1.4s ease-in-out infinite;
+}
+
 /* Must-draw state: blue glow on pile, pulsating yellow ROBAR label */
 @keyframes draw-pile-glow-blue {
   0%, 100% { box-shadow: 0 0 10px 2px rgba(30,140,255,.6), 2px 4px 14px rgba(0,0,0,.6); transform: scale(1); }
@@ -351,6 +367,20 @@ input[type=text]:focus { border-color: var(--blue); }
   border-color: rgba(30,140,255,.7);
 }
 #draw-pile-area.must-draw .pile-label {
+  animation: robar-pulse-yellow 1s ease-in-out infinite;
+  font-weight: 700;
+}
+
+/* Matching-liar state: yellow glow on pile, pulsating yellow ROBAR label */
+@keyframes draw-pile-glow-yellow {
+  0%, 100% { box-shadow: 0 0 10px 2px rgba(220,180,0,.6), 2px 4px 14px rgba(0,0,0,.6); transform: scale(1); }
+  50%       { box-shadow: 0 0 24px 8px rgba(220,180,0,.95), 2px 4px 14px rgba(0,0,0,.6); transform: scale(1.08); }
+}
+#draw-pile-area.matching-liar .card-back {
+  animation: draw-pile-glow-yellow 1s ease-in-out infinite;
+  border-color: rgba(220,180,0,.7);
+}
+#draw-pile-area.matching-liar .pile-label {
   animation: robar-pulse-yellow 1s ease-in-out infinite;
   font-weight: 700;
 }
@@ -372,6 +402,68 @@ input[type=text]:focus { border-color: var(--blue); }
   animation: robar-pulse-red 1s ease-in-out infinite;
   font-weight: 700;
 }
+
+/* Draw Confirm Modal */
+.draw-confirm-modal {
+  position: fixed;
+  inset: 0;
+  background: rgba(0,0,0,.72);
+  backdrop-filter: blur(4px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 600;
+}
+.draw-confirm-modal.hidden { display: none; }
+.draw-confirm-card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  width: min(320px, 88vw);
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+  box-shadow: 0 8px 40px rgba(0,0,0,.6);
+}
+.draw-confirm-icon {
+  width: 100%;
+  padding: 1.25rem 0 1rem;
+  font-size: 2.4rem;
+  line-height: 1;
+  border-bottom: 1px solid var(--border);
+}
+.draw-confirm-card.accent-white  .draw-confirm-icon { background: rgba(255,255,255,.07); }
+.draw-confirm-card.accent-yellow .draw-confirm-icon { background: rgba(220,180,0,.12); }
+.draw-confirm-card.accent-red    .draw-confirm-icon { background: rgba(220,40,40,.12); }
+.draw-confirm-title {
+  font-size: 1rem;
+  font-weight: 700;
+  padding: 1rem 1.25rem .25rem;
+}
+.draw-confirm-card.accent-white  .draw-confirm-title { color: #e8eeff; }
+.draw-confirm-card.accent-yellow .draw-confirm-title { color: #FFD700; }
+.draw-confirm-card.accent-red    .draw-confirm-title { color: #ff5555; }
+.draw-confirm-msg {
+  font-size: .875rem;
+  color: var(--muted);
+  line-height: 1.55;
+  padding: 0 1.25rem 1.25rem;
+}
+.draw-confirm-btns {
+  display: flex;
+  gap: 0;
+  width: 100%;
+  border-top: 1px solid var(--border);
+}
+.draw-confirm-btns .btn {
+  flex: 1;
+  border-radius: 0;
+  padding: .85rem;
+  font-size: .9rem;
+}
+.draw-confirm-btns .btn:first-child { border-right: 1px solid var(--border); }
 
 /* ---- CARDS ---- */
 .card {

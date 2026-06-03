@@ -599,13 +599,38 @@ function onRoomUpdate(state) {
 function renderLobby(state) {
   document.getElementById('lobby-code').textContent = currentRoomId;
 
-  document.getElementById('player-list').innerHTML = state.players.map(p =>
-    `<div class="player-item ${p.id === localUid ? 'me' : ''} ${p.disconnected ? 'player-disconnected' : ''}">
-      ${p.id === state.hostId ? '👑 ' : ''}${esc(p.name)}${p.disconnected ? ' <span class="dc-badge">desconectado</span>' : ''}
-    </div>`
-  ).join('');
+  const prevNames  = state.prevPlayerNames || [];
+  const readyVotes = state.readyVotes || [];
+  const isRematch  = prevNames.length > 0;
 
-  const isHost = state.hostId === localUid;
+  document.getElementById('player-list').innerHTML = state.players.map(p => {
+    const isReady   = readyVotes.includes(p.id);
+    const wasHere   = isRematch && prevNames.includes(p.name);
+    return `<div class="player-item ${p.id === localUid ? 'me' : ''} ${p.disconnected ? 'player-disconnected' : ''}">
+      ${p.id === state.hostId ? '👑 ' : ''}${esc(p.name)}
+      ${wasHere ? '<span class="prev-badge">vuelve</span>' : ''}
+      ${isReady  ? '<span class="ready-badge">✓ listo</span>' : ''}
+      ${p.disconnected ? ' <span class="dc-badge">desconectado</span>' : ''}
+    </div>`;
+  }).join('');
+
+  // Ready-up button (only shown in rematch lobbies)
+  let readyArea = document.getElementById('lobby-ready-area');
+  if (!readyArea) {
+    readyArea = document.createElement('div');
+    readyArea.id = 'lobby-ready-area';
+    document.querySelector('.lobby-actions').prepend(readyArea);
+  }
+  if (isRematch) {
+    const alreadyReady = readyVotes.includes(localUid);
+    readyArea.innerHTML = alreadyReady
+      ? '<p class="muted ready-confirmed">✓ Estás listo para jugar</p>'
+      : '<button class="btn btn-primary" onclick="handleReadyVote()">¡Quiero jugar de nuevo!</button>';
+  } else {
+    readyArea.innerHTML = '';
+  }
+
+  const isHost  = state.hostId === localUid;
   const canStart = state.players.length >= 2;
   const startBtn = document.getElementById('start-btn');
   const waitMsg  = document.getElementById('waiting-msg');
@@ -2006,7 +2031,16 @@ async function backToLobby() {
     challengeOpen: false,
     lastActualCard: null,
     lastClaimedCard: null,
+    prevPlayerNames: roomState.players.map(p => p.name),
+    readyVotes: [],
     players: roomState.players.map(p => ({ ...p, cardCount: 0 }))
+  });
+}
+
+async function handleReadyVote() {
+  if (!currentRoomId || !localUid) return;
+  await db.collection('rooms').doc(currentRoomId).update({
+    readyVotes: firebase.firestore.FieldValue.arrayUnion(localUid)
   });
 }
 

@@ -33,13 +33,25 @@ const ALL_VALUES = [...NUMBERS, ...ACTIONS, ...WILDS];
 const VALUE_LABEL = {
   '0':'0','1':'1','2':'2','3':'3','4':'4',
   '5':'5','6':'6','7':'7','8':'8','9':'9',
-  skip:'⊘', reverse:'↺', draw2:'+2', wild:'C', wild4:'+4'
+  skip:'⊘', reverse:'⇄', draw2:'+2', wild:'C', wild4:'+4'
 };
 const CARD_POINTS = {
   '0':0,'1':1,'2':2,'3':3,'4':4,'5':5,'6':6,'7':7,'8':8,'9':9,
   skip:20, reverse:20, draw2:20, wild:50, wild4:50
 };
 const COLOR_NAME = { red:'Rojo', yellow:'Amarillo', green:'Verde', blue:'Azul', black:'Comodín' };
+
+function cornerLabelHTML(value, posClass) {
+  const lbl = VALUE_LABEL[value];
+  const icon = value === '7' ? '<span class="corner-icon">⇄</span>'
+             : value === '0' ? '<span class="corner-icon">↺</span>'
+             : '';
+  return `<span class="card-label ${posClass}">${lbl}${icon}</span>`;
+}
+
+function reverseCenterHTML() {
+  return `<span class="reverse-center"><span class="rev-arrow">↗</span><span class="rev-arrow">↙</span></span>`;
+}
 
 function wildCenterHTML(value) {
   const label = value === 'wild4' ? '+4' : '';
@@ -575,9 +587,14 @@ function renderTopCard(state) {
   el.className = 'card ' + (state.topColor || 'red');
   const lbl = VALUE_LABEL[state.topValue] || '?';
   const isWild = WILDS.includes(state.topValue);
+  const isReverse = state.topValue === 'reverse';
+  const tlHTML = cornerLabelHTML(state.topValue, 'tl');
+  const brHTML = cornerLabelHTML(state.topValue, 'br');
   el.innerHTML = isWild
-    ? `<span class="card-label tl">${lbl}</span>${wildCenterHTML(state.topValue)}<span class="card-label br">${lbl}</span>`
-    : `<span class="card-label tl">${lbl}</span><span class="card-label center">${lbl}</span><span class="card-label br">${lbl}</span>`;
+    ? `${tlHTML}${wildCenterHTML(state.topValue)}${brHTML}`
+    : isReverse
+    ? `${tlHTML}${reverseCenterHTML()}${brHTML}`
+    : `${tlHTML}<span class="card-label center">${lbl}</span>${brHTML}`;
 }
 
 function renderOpponents(state) {
@@ -653,14 +670,16 @@ function renderHand(state) {
     }
     const lbl = VALUE_LABEL[card.value];
     const isWild = WILDS.includes(card.value);
-    const centerHTML = isWild ? wildCenterHTML(card.value) : `<span class="card-label center">${lbl}</span>`;
+    const centerHTML = isWild ? wildCenterHTML(card.value)
+      : card.value === 'reverse' ? reverseCenterHTML()
+      : `<span class="card-label center">${lbl}</span>`;
     return `<div class="card ${card.color} ${isLiarCard(card) ? 'liar' : ''}${isPlayable ? ' playable' : ''}${extraClass}"
       data-index="${i}"
       onclick="${onclick}"
     >
-      <span class="card-label tl">${lbl}</span>
+      ${cornerLabelHTML(card.value, 'tl')}
       ${centerHTML}
-      <span class="card-label br">${lbl}</span>
+      ${cornerLabelHTML(card.value, 'br')}
     </div>`;
   }).join('');
 
@@ -721,11 +740,13 @@ async function selectCard(index) {
   const preview = document.getElementById('actual-card-preview');
   const _lbl = VALUE_LABEL[card.value];
   const _isWild = WILDS.includes(card.value);
-  const _centerHTML = _isWild ? wildCenterHTML(card.value) : `<span class="card-label center" style="font-size:1.2rem">${_lbl}</span>`;
+  const _centerHTML = _isWild ? wildCenterHTML(card.value)
+    : card.value === 'reverse' ? reverseCenterHTML()
+    : `<span class="card-label center" style="font-size:1.2rem">${_lbl}</span>`;
   preview.innerHTML = `<div class="card ${card.color} ${isLiarCard(card) ? 'liar' : ''}" style="width:50px;height:75px;margin:0 auto">
-    <span class="card-label tl">${_lbl}</span>
+    ${cornerLabelHTML(card.value, 'tl')}
     ${_centerHTML}
-    <span class="card-label br">${_lbl}</span>
+    ${cornerLabelHTML(card.value, 'br')}
   </div>`;
 
   if (card.value === 'wild' || isLiarCard(card)) {

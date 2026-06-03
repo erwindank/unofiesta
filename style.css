@@ -232,6 +232,9 @@ input[type=text]:focus { border-color: var(--blue); }
 .opponent-cards { display: flex; gap: 2px; flex-wrap: wrap; justify-content: center; }
 .opponent-count { font-size: .65rem; color: rgba(255,255,255,.6); }
 
+.player-disconnected { opacity: 0.45; filter: grayscale(0.7); }
+.dc-badge { font-size: .6rem; color: #f87171; font-weight: 400; letter-spacing: .02em; }
+
 /* Card back (mini — opponent hand) */
 .card-back.mini {
   width: 14px;

@@ -141,12 +141,18 @@ function shuffle(arr) {
 firebase.initializeApp(FIREBASE_CONFIG);
 const auth = firebase.auth();
 const db   = firebase.firestore();
+const rtdb = firebase.database();
 
 let localUid  = null;
 let localName = null;
 let currentRoomId = null;
 let roomUnsub     = null;
 let roomState     = null;
+
+// Presence state
+let presenceRef    = null;
+let rtdbRoomRef    = null;
+const disconnectTimers = {};
 
 // Ephemeral play state (never stored in Firestore)
 let selectedCardIdx = null;
@@ -367,19 +373,27 @@ async function handleJoin() {
     const existingPlayer = data.players.find(p => p.name === name);
 
     if (existingPlayer) {
-      // Reconnect: take over that player's slot with the current UID
+      // Reconnect: take over that player's slot, clear disconnected flag
       const oldUid = existingPlayer.id;
-      if (oldUid !== localUid) {
+      const wasDisconnected = !!existingPlayer.disconnected;
+
+      if (oldUid !== localUid || wasDisconnected) {
         const newPlayers = data.players.map(p =>
-          p.id === oldUid ? { ...p, id: localUid } : p
+          p.id === oldUid ? { ...p, id: localUid, disconnected: false } : p
         );
-        const hand = data.hands?.[oldUid] || [];
-        await db.collection('rooms').doc(code).update({
+        const updates = {
           players: newPlayers,
-          [`hands.${localUid}`]: hand,
-          [`hands.${oldUid}`]: firebase.firestore.FieldValue.delete(),
           lastActivity: firebase.firestore.FieldValue.serverTimestamp()
-        });
+        };
+        if (oldUid !== localUid) {
+          const hand = data.hands?.[oldUid] || [];
+          updates[`hands.${localUid}`] = hand;
+          updates[`hands.${oldUid}`] = firebase.firestore.FieldValue.delete();
+        }
+        if (wasDisconnected) {
+          updates.log = addLog(data.log, `${name} se reconectó.`);
+        }
+        await db.collection('rooms').doc(code).update(updates);
       }
       localName = name;
     } else {
@@ -409,7 +423,20 @@ async function tryRejoin(roomId) {
     const snap = await db.collection('rooms').doc(roomId).get();
     if (!snap.exists) { sessionStorage.clear(); return; }
     const data = snap.data();
-    if (!data.players.find(p => p.id === localUid)) { sessionStorage.clear(); return; }
+    const player = data.players.find(p => p.id === localUid);
+    if (!player) { sessionStorage.clear(); return; }
+
+    if (player.disconnected) {
+      const newPlayers = data.players.map(p =>
+        p.id === localUid ? { ...p, disconnected: false } : p
+      );
+      await db.collection('rooms').doc(roomId).update({
+        players: newPlayers,
+        log: addLog(data.log, `${player.name} se reconectó.`),
+        lastActivity: firebase.firestore.FieldValue.serverTimestamp()
+      });
+    }
+
     currentRoomId = roomId;
     subscribeToRoom(roomId);
     if (data.status === 'lobby') showScreen('lobby');
@@ -426,6 +453,98 @@ function copyCode() {
 }
 
 // ============================================================
+// PRESENCE — disconnect detection via RTDB + beforeunload
+// ============================================================
+
+function setupPresence(roomId) {
+  teardownPresence();
+
+  presenceRef  = rtdb.ref(`presence/${roomId}/${localUid}`);
+  rtdbRoomRef  = rtdb.ref(`presence/${roomId}`);
+
+  presenceRef.set({ name: localName, t: firebase.database.ServerValue.TIMESTAMP });
+  presenceRef.onDisconnect().remove();
+
+  rtdbRoomRef.on('value', snap => {
+    if (!roomState || !currentRoomId) return;
+    const present = snap.val() || {};
+
+    for (const player of roomState.players) {
+      if (player.id === localUid) continue;
+
+      if (!present[player.id]) {
+        if (!disconnectTimers[player.id]) {
+          const pid  = player.id;
+          const pname = player.name;
+          disconnectTimers[pid] = setTimeout(async () => {
+            delete disconnectTimers[pid];
+            if (roomState?.players.find(p => p.id === pid)) {
+              await markPlayerDisconnected(pid, pname);
+            }
+          }, 60000);
+        }
+      } else {
+        if (disconnectTimers[player.id]) {
+          clearTimeout(disconnectTimers[player.id]);
+          delete disconnectTimers[player.id];
+        }
+      }
+    }
+  });
+}
+
+function teardownPresence() {
+  if (presenceRef) {
+    presenceRef.onDisconnect().cancel();
+    presenceRef.remove();
+    presenceRef = null;
+  }
+  if (rtdbRoomRef) {
+    rtdbRoomRef.off();
+    rtdbRoomRef = null;
+  }
+  Object.keys(disconnectTimers).forEach(uid => {
+    clearTimeout(disconnectTimers[uid]);
+    delete disconnectTimers[uid];
+  });
+}
+
+async function markPlayerDisconnected(uid, name) {
+  if (!currentRoomId) return;
+  try {
+    await db.runTransaction(async tx => {
+      const ref  = db.collection('rooms').doc(currentRoomId);
+      const snap = await tx.get(ref);
+      if (!snap.exists) return;
+
+      const state  = snap.data();
+      const player = state.players.find(p => p.id === uid);
+      if (!player || player.disconnected) return; // not found or already marked
+
+      const newPlayers = state.players.map(p =>
+        p.id === uid ? { ...p, disconnected: true } : p
+      );
+      tx.update(ref, {
+        players: newPlayers,
+        log: addLog(state.log, `${name} se desconectó.`),
+        lastActivity: firebase.firestore.FieldValue.serverTimestamp()
+      });
+    });
+  } catch (e) {
+    console.error('markPlayerDisconnected failed:', e);
+  }
+}
+
+function skipDisconnectedTurn(state) {
+  const current = state.players[state.currentPlayerIndex];
+  db.collection('rooms').doc(currentRoomId).update({
+    currentPlayerIndex: nextPlayerIndex(state),
+    log: addLog(state.log, `Se saltó el turno de ${current.name} (desconectado).`),
+    lastActivity: firebase.firestore.FieldValue.serverTimestamp()
+  }).catch(() => {});
+}
+
+// ============================================================
 // ROOM SUBSCRIPTION
 // ============================================================
 
@@ -436,6 +555,7 @@ function subscribeToRoom(roomId) {
     roomState = snap.data();
     onRoomUpdate(roomState);
   });
+  setupPresence(roomId);
 }
 
 function onRoomUpdate(state) {
@@ -457,6 +577,13 @@ function onRoomUpdate(state) {
       }).catch(() => {});
       return;
     }
+    // Auto-skip disconnected players' turns (any client can trigger; same result from all)
+    const currentPlayer = state.players[state.currentPlayerIndex];
+    const activePlayers = state.players.filter(p => !p.disconnected);
+    if (currentPlayer?.disconnected && activePlayers.length > 0 &&
+        !state.challengeOpen && !state.wildChallenge && !state.sevenSwapPending) {
+      skipDisconnectedTurn(state);
+    }
     showScreen('game');
     renderGame(state);
   } else if (state.status === 'ended') {
@@ -473,8 +600,8 @@ function renderLobby(state) {
   document.getElementById('lobby-code').textContent = currentRoomId;
 
   document.getElementById('player-list').innerHTML = state.players.map(p =>
-    `<div class="player-item ${p.id === localUid ? 'me' : ''}">
-      ${p.id === state.hostId ? '👑 ' : ''}${esc(p.name)}
+    `<div class="player-item ${p.id === localUid ? 'me' : ''} ${p.disconnected ? 'player-disconnected' : ''}">
+      ${p.id === state.hostId ? '👑 ' : ''}${esc(p.name)}${p.disconnected ? ' <span class="dc-badge">desconectado</span>' : ''}
     </div>`
   ).join('');
 
@@ -693,11 +820,13 @@ function renderOpponents(state) {
     const isCurrent = state.players[state.currentPlayerIndex]?.id === p.id;
     const nextIdx = nextPlayerIndex(state);
     const isNext = state.players[nextIdx]?.id === p.id;
+    const isDisconnected = !!p.disconnected;
     const miniCards = Array(Math.min(p.cardCount, 12)).fill(0)
       .map(() => `<div class="card-back mini"></div>`).join('');
     return `<div class="opponent ${isCurrent && !state.challengeOpen ? 'active-player' : ''}
-                                  ${isNext && state.challengeOpen ? 'active-player' : ''}">
-      <div class="opponent-name">${esc(p.name)}</div>
+                                  ${isNext && state.challengeOpen ? 'active-player' : ''}
+                                  ${isDisconnected ? 'player-disconnected' : ''}">
+      <div class="opponent-name">${esc(p.name)}${isDisconnected ? ' <span class="dc-badge">desconectado</span>' : ''}</div>
       <div class="opponent-cards">${miniCards}</div>
       <div class="opponent-count">${p.cardCount}🃏</div>
     </div>`;
@@ -1898,6 +2027,7 @@ async function handleLeaveGame() {
   const newEndVotes = (state.endVotes || []).filter(id => id !== localUid);
   const leaveLog = addLog(state.log, `${localName} salió de la partida.`);
 
+  teardownPresence();
   if (roomUnsub) { roomUnsub(); roomUnsub = null; }
   sessionStorage.clear();
   currentRoomId = null;
@@ -2075,9 +2205,17 @@ function showWinnerError(msg) {
 }
 
 function returnToMain() {
+  teardownPresence();
   if (roomUnsub) { roomUnsub(); roomUnsub = null; }
   currentRoomId = null;
   roomState = null;
   sessionStorage.clear();
   showScreen('landing');
 }
+
+window.addEventListener('beforeunload', () => {
+  if (presenceRef) {
+    presenceRef.onDisconnect().cancel();
+    presenceRef.remove();
+  }
+});

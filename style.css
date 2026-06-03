@@ -228,7 +228,7 @@ input[type=text]:focus { border-color: var(--blue); }
   width: 14px;
   height: 20px;
   border-radius: 3px;
-  background: #0a1428;
+  background: #08122e;
   border: 1px solid rgba(255,255,255,.25);
   position: relative;
   overflow: hidden;
@@ -237,9 +237,9 @@ input[type=text]:focus { border-color: var(--blue); }
   content: '';
   position: absolute;
   inset: 1px;
-  background: linear-gradient(135deg, #C81010 40%, #1040B0 60%);
+  background: radial-gradient(ellipse 55% 45% at center, #E8B800 0%, #C81010 55%, transparent 85%);
   border-radius: 2px;
-  opacity: .7;
+  opacity: .75;
 }
 
 /* Game table */
@@ -279,8 +279,10 @@ input[type=text]:focus { border-color: var(--blue); }
   background: #08122e;
   border: 3px solid rgba(255,255,255,.25);
   display: flex;
+  flex-direction: column;
   align-items: center;
   justify-content: center;
+  gap: 1px;
   cursor: pointer;
   transition: transform .15s;
   overflow: hidden;
@@ -301,7 +303,7 @@ input[type=text]:focus { border-color: var(--blue); }
   border-radius: 7px;
 }
 .draw-pile .card-back:hover { transform: scale(1.05); }
-.draw-pile .card-back span {
+.draw-pile .card-back .back-uno {
   position: relative;
   z-index: 1;
   color: #E8B800;
@@ -309,6 +311,15 @@ input[type=text]:focus { border-color: var(--blue); }
   font-size: .85rem;
   letter-spacing: 1.5px;
   text-shadow: 0 0 8px rgba(255,200,0,.7), 0 1px 3px rgba(0,0,0,.9);
+}
+.draw-pile .card-back .back-liars {
+  position: relative;
+  z-index: 1;
+  color: #e02020;
+  font-weight: 900;
+  font-size: .5rem;
+  letter-spacing: 1px;
+  text-shadow: 0 0 6px rgba(220,0,0,.8), 0 1px 3px rgba(0,0,0,.9);
 }
 
 /* ---- CARDS ---- */

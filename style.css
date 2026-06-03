@@ -969,6 +969,131 @@ input[type=text]:focus { border-color: var(--blue); }
   padding: .25rem 0;
 }
 
+/* Card table inside wild challenge */
+.wc-table {
+  display: flex;
+  flex-wrap: wrap;
+  gap: .6rem;
+  justify-content: center;
+  padding: .25rem 0;
+}
+.wc-card-slot {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: .3rem;
+}
+.wc-slot-name {
+  font-size: .68rem;
+  color: rgba(255,255,255,.6);
+  text-align: center;
+  max-width: 60px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+/* Face-down card back */
+.wc-card-back {
+  width: 60px;
+  height: 90px;
+  border-radius: 10px;
+  background: linear-gradient(135deg, #1a1a2e 0%, #16213e 50%, #0f3460 100%);
+  border: 2px solid rgba(255,255,255,.18);
+  box-shadow: 1px 3px 10px rgba(0,0,0,.5);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  position: relative;
+  overflow: hidden;
+}
+.wc-card-back::before {
+  content: '';
+  position: absolute;
+  inset: 4px;
+  border-radius: 5px;
+  background: repeating-linear-gradient(
+    45deg,
+    rgba(255,255,255,.04),
+    rgba(255,255,255,.04) 2px,
+    transparent 2px,
+    transparent 8px
+  );
+}
+.wc-card-back .back-uno {
+  position: relative;
+  z-index: 1;
+  font-size: .65rem;
+  font-weight: 900;
+  color: #E8B800;
+  letter-spacing: 1px;
+  text-shadow: 0 0 6px rgba(255,200,0,.6);
+}
+/* Empty slot (waiting) */
+.wc-slot-empty {
+  width: 60px;
+  height: 90px;
+  border-radius: 10px;
+  border: 2px dashed rgba(255,255,255,.2);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 1.2rem;
+  color: rgba(255,255,255,.2);
+}
+/* Flipped card wrapper */
+.wc-slot-flipped {
+  position: relative;
+  display: inline-flex;
+}
+.wc-slot-flipped .card {
+  width: 60px;
+  height: 90px;
+}
+.wc-flip-badge {
+  position: absolute;
+  top: -6px;
+  right: -6px;
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: .7rem;
+  font-weight: 900;
+  z-index: 2;
+}
+.wc-flip-wrong .wc-flip-badge {
+  background: #c81515;
+  color: #fff;
+  box-shadow: 0 0 6px rgba(200,21,21,.7);
+}
+.wc-flip-correct .wc-flip-badge {
+  background: #189a20;
+  color: #fff;
+  box-shadow: 0 0 6px rgba(24,154,32,.7);
+}
+.wc-flip-wrong .card { opacity: .55; }
+/* Log strip at bottom of wild challenge panel */
+.wc-log {
+  border-top: 1px solid rgba(255,255,255,.1);
+  padding-top: .6rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+  max-height: 120px;
+  overflow-y: auto;
+  scrollbar-width: thin;
+  scrollbar-color: rgba(255,255,255,.15) transparent;
+}
+.wc-log:empty { display: none; }
+.wc-log .log-entry {
+  font-size: .75rem;
+  padding: .25rem 0;
+  border-bottom: none;
+}
+.wc-log .log-entry:first-child { font-size: .8rem; }
+
 /* ---- MOBILE / TOUCH ---- */
 
 /* Eliminate 300ms tap delay */

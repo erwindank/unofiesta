@@ -1161,6 +1161,7 @@ async function startWildChallenge(actualCard, chosenColor, cardIndex) {
       chosenColor,
       playersNeeded: others,
       submittedCards: {},
+      flippedCards: {},
       accusePool: [...others],
       accusedWrong: [],
       foundPlayerId: null,
@@ -1224,6 +1225,7 @@ async function accuseWildPlayer(targetId) {
   let log = state.log;
 
   const newAccusePool = wc.accusePool.filter(id => id !== targetId);
+  const newFlipped = { ...(wc.flippedCards || {}), [targetId]: { card: submitted, result: hasColor ? 'correct' : 'wrong' } };
 
   if (!hasColor) {
     const { drawn, newDrawPile } = takeCards(drawPile, 1);
@@ -1241,6 +1243,7 @@ async function accuseWildPlayer(targetId) {
       hands, players, drawPile,
       wildChallenge: { ...wc, submittedCards: newSubmitted, accusePool: newAccusePool,
         accusedWrong: [...wc.accusedWrong, targetId],
+        flippedCards: newFlipped,
         phase: goChoosing ? 'choosing' : 'accusing' },
       log, lastActivity: firebase.firestore.FieldValue.serverTimestamp()
     });
@@ -1252,7 +1255,8 @@ async function accuseWildPlayer(targetId) {
 
     await db.collection('rooms').doc(currentRoomId).update({
       wildChallenge: { ...wc, accusePool: newAccusePool, foundPlayerId: targetId,
-        discardQueue, phase: discardQueue.length > 0 ? 'resolving' : 'choosing' },
+        discardQueue, flippedCards: newFlipped,
+        phase: discardQueue.length > 0 ? 'resolving' : 'choosing' },
       log, lastActivity: firebase.firestore.FieldValue.serverTimestamp()
     });
   }
@@ -1286,6 +1290,29 @@ async function finalizeWildColor(color) {
   });
 }
 
+function buildWcCardTable(wc, state) {
+  const nonChoosers = state.players.filter(p => p.id !== wc.chooserId);
+  const flipped = wc.flippedCards || {};
+  const slots = nonChoosers.map(p => {
+    const pid = p.id;
+    const flippedEntry = flipped[pid];
+    let cardHTML;
+    if (flippedEntry) {
+      const cls = flippedEntry.result === 'correct' ? 'wc-flip-correct' : 'wc-flip-wrong';
+      const badge = flippedEntry.result === 'correct' ? '✓' : '✗';
+      cardHTML = `<div class="wc-slot-flipped ${cls}">${buildCardHTML(flippedEntry.card)}<div class="wc-flip-badge">${badge}</div></div>`;
+    } else if (wc.submittedCards?.[pid]) {
+      cardHTML = `<div class="wc-card-back"><span class="back-uno">UNO</span></div>`;
+    } else if (wc.playersNeeded?.includes(pid)) {
+      cardHTML = `<div class="wc-slot-empty">?</div>`;
+    } else {
+      cardHTML = `<div class="wc-card-back"><span class="back-uno">UNO</span></div>`;
+    }
+    return `<div class="wc-card-slot">${cardHTML}<span class="wc-slot-name">${esc(p.name)}</span></div>`;
+  }).join('');
+  return `<div class="wc-table">${slots}</div>`;
+}
+
 function renderWildChallenge(state) {
   const panel = document.getElementById('wild-challenge-panel');
   const wc = state.wildChallenge;
@@ -1296,6 +1323,7 @@ function renderWildChallenge(state) {
   const body    = document.getElementById('wc-body');
   const handEl  = document.getElementById('wc-hand');
   const actions = document.getElementById('wc-actions');
+  const logEl   = document.getElementById('wc-log');
 
   const colorSpan = (c) => {
     const hex = LOG_COLOR_HEX[c] || '#fff';
@@ -1306,24 +1334,25 @@ function renderWildChallenge(state) {
   handEl.innerHTML = '';
   actions.innerHTML = '';
 
-  if (wc.phase === 'collecting') {
-    const iChooser  = wc.chooserId === localUid;
-    const iSubmitted = !wc.playersNeeded.includes(localUid);
+  if (logEl) {
+    logEl.innerHTML = [...(state.log || [])].reverse().slice(0, 6).map(msg => {
+      const cls = msg.includes('descubrió') ? ' log-lie'
+                : /dijo la verdad/i.test(msg) ? ' log-truth'
+                : msg.includes('le gritó UNO') ? ' log-uno'
+                : msg.includes('¡UNO! 🎴') ? ' log-uno-call'
+                : '';
+      return `<div class="log-entry${cls}">${colorizeLog(msg)}</div>`;
+    }).join('');
+  }
 
-    if (iChooser || iSubmitted) {
-      title.innerHTML = `🃏 Comodín — ${colorSpan(wc.chosenColor)}`;
-      const waiting = wc.playersNeeded.map(id => {
-        const n = state.players.find(p => p.id === id)?.name || '?';
-        return `<li>${esc(n)}</li>`;
-      }).join('');
-      const done = state.players
-        .filter(p => p.id !== wc.chooserId && !wc.playersNeeded.includes(p.id))
-        .map(p => `<li class="submitted">✓ ${esc(p.name)}</li>`).join('');
-      body.innerHTML = `<p>Esperando que pongan su carta…</p><ul>${done}${waiting}</ul>`;
-    } else {
+  const table = buildWcCardTable(wc, state);
+
+  if (wc.phase === 'collecting') {
+    const needsToSubmit = wc.playersNeeded?.includes(localUid) && wc.chooserId !== localUid;
+
+    if (needsToSubmit) {
       title.innerHTML = `🃏 ${esc(wc.chooserName)} jugó ${rainbowHTML('Comodín')}<br>¡Pon una carta — color ${colorSpan(wc.chosenColor)}!`;
-      body.innerHTML = `<p>Toca una carta de tu mano (no comodines)</p>`;
-      // Render hand inside overlay
+      body.innerHTML = `<p>Toca una carta de tu mano (no comodines)</p>${table}`;
       const myHand = state.hands?.[localUid] || [];
       handEl.classList.remove('hidden');
       handEl.innerHTML = myHand.map((card, i) => {
@@ -1337,6 +1366,13 @@ function renderWildChallenge(state) {
           ${cornerLabelHTML(card.value,'tl')}${center}${cornerLabelHTML(card.value,'br')}
         </div>`;
       }).join('');
+    } else {
+      title.innerHTML = `🃏 Comodín — ${colorSpan(wc.chosenColor)}`;
+      const waitingNames = (wc.playersNeeded || [])
+        .map(id => esc(state.players.find(p => p.id === id)?.name || '?')).join(', ');
+      const waitingLine = waitingNames
+        ? `<p style="color:rgba(255,255,255,.45);font-size:.8rem">Esperando: ${waitingNames}</p>` : '';
+      body.innerHTML = `${table}${waitingLine}`;
     }
   }
 
@@ -1348,39 +1384,21 @@ function renderWildChallenge(state) {
         return `<button class="btn btn-danger" style="width:100%" onclick="accuseWildPlayer('${id}')">
           Acusar a ${esc(p?.name || '?')}</button>`;
       }).join('');
-      body.innerHTML = `<p>Elige a quién acusar uno a uno:</p><div class="wc-accuse-list">${buttons}</div>`;
-      if (wc.accusedWrong?.length) {
-        const wrongNames = wc.accusedWrong.map(id =>
-          esc(state.players.find(p=>p.id===id)?.name||'?')).join(', ');
-        body.innerHTML += `<p style="color:rgba(255,255,255,.4);font-size:.8rem">Sin color: ${wrongNames}</p>`;
-      }
+      body.innerHTML = `${table}<div class="wc-accuse-list">${buttons}</div>`;
     } else {
-      const amInPool = wc.accusePool.includes(localUid);
-      const wasWrong = wc.accusedWrong?.includes(localUid);
       title.innerHTML = `🎯 ${esc(wc.chooserName)} está acusando…`;
-      if (amInPool) {
-        body.innerHTML = `<p>Tienes una carta boca abajo. ¡Espera a que te acusen!</p>`;
-      } else if (wasWrong) {
-        body.innerHTML = `<p>Fuiste acusado — no tenías ${colorSpan(wc.chosenColor)}.<br>Recuperaste tu carta y robaste 1.</p>`;
-      } else {
-        body.innerHTML = `<p>Esperando…</p>`;
-      }
+      body.innerHTML = table;
     }
   }
 
   else if (wc.phase === 'resolving') {
     const found = state.players.find(p => p.id === wc.foundPlayerId);
     title.innerHTML = `✅ ¡${esc(found?.name||'?')} tenía ${colorSpan(wc.chosenColor)}!`;
-    const slots = wc.discardQueue.map(id => {
-      const card = wc.submittedCards?.[id];
-      const pname = esc(state.players.find(p=>p.id===id)?.name||'?');
-      return `<div class="wc-card-slot"><span>${pname}</span>${buildCardHTML(card)}</div>`;
-    }).join('');
-    body.innerHTML = `<p>Cartas que se descartan:</p><div class="wc-cards-row">${slots}</div>`;
+    body.innerHTML = table;
     if (wc.chooserId === localUid) {
       actions.innerHTML = `<button class="btn btn-primary" onclick="discardWildResolved()">Descartar y elegir color</button>`;
     } else {
-      body.innerHTML += `<p style="margin-top:.5rem">Esperando a ${esc(wc.chooserName)}…</p>`;
+      body.innerHTML += `<p style="margin-top:.5rem;color:rgba(255,255,255,.45);font-size:.85rem">Esperando a ${esc(wc.chooserName)}…</p>`;
     }
   }
 
@@ -1390,10 +1408,10 @@ function renderWildChallenge(state) {
       const btns = COLORS.map(c =>
         `<button class="color-btn ${c}" onclick="finalizeWildColor('${c}')" title="${COLOR_NAME[c]}"></button>`
       ).join('');
-      body.innerHTML = `<div class="wc-color-row">${btns}</div>`;
+      body.innerHTML = `${table}<div class="wc-color-row">${btns}</div>`;
     } else {
       title.innerHTML = `🎨 ${esc(wc.chooserName)} elige el color final…`;
-      body.innerHTML = `<p>Espera un momento…</p>`;
+      body.innerHTML = table;
     }
   }
 }

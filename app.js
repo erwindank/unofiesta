@@ -928,7 +928,7 @@ async function executeSevenSwap(targetId) {
   const pending = state.sevenSwapPending;
   if (!pending || pending.chooserId !== localUid) return;
 
-  let { hands, players } = state;
+  let { hands, players, drawPile } = state;
   const targetName = players.find(p => p.id === targetId)?.name || '?';
   const chooserHand = hands[localUid] || [];
   const targetHand  = hands[targetId]  || [];
@@ -936,16 +936,31 @@ async function executeSevenSwap(targetId) {
   hands   = { ...hands, [localUid]: targetHand, [targetId]: chooserHand };
   players = players.map(p => ({ ...p, cardCount: (hands[p.id] || []).length }));
 
-  const log = addLog(state.log, `${localName} intercambió manos con ${targetName}.`);
+  let log = addLog(state.log, `${localName} intercambió manos con ${targetName}.`);
 
-  await db.collection('rooms').doc(currentRoomId).update({
+  const update = {
     hands,
     players,
     currentPlayerIndex: pending.nextPlayerIndex,
     sevenSwapPending: firebase.firestore.FieldValue.delete(),
     log,
     lastActivity: firebase.firestore.FieldValue.serverTimestamp()
-  });
+  };
+
+  const penaltyDraw = state.pendingPenaltyDraw;
+  if (penaltyDraw) {
+    const { drawn, newDrawPile } = takeCards(drawPile, penaltyDraw.count);
+    const pid = penaltyDraw.playerId;
+    update.hands = { ...update.hands, [pid]: [...(update.hands[pid] || []), ...drawn] };
+    update.players = update.players.map(p => p.id === pid ? { ...p, cardCount: update.hands[p.id].length } : p);
+    update.drawPile = newDrawPile;
+    update.pendingPenaltyDraw = firebase.firestore.FieldValue.delete();
+    const penaltyName = state.players.find(p => p.id === pid)?.name || '?';
+    log = addLog(log, `${penaltyName} roba ${drawn.length} (penalización).`);
+    update.log = log;
+  }
+
+  await db.collection('rooms').doc(currentRoomId).update(update);
 }
 
 function renderSevenSwapOverlay(state) {
@@ -1087,14 +1102,14 @@ async function handleChallenge() {
   let log = state.log;
 
   if (isLie) {
-    // El mentiroso roba 1 carta, la jugada se cancela y pasa el turno
+    // El mentiroso recupera la carta jugada y roba 1 carta del mazo
     const { drawn, newDrawPile } = takeCards(drawPile, 1);
-    hands = { ...hands, [state.lastPlayerId]: [...(hands[state.lastPlayerId] || []), ...drawn] };
+    hands = { ...hands, [state.lastPlayerId]: [...(hands[state.lastPlayerId] || []), actual, ...drawn] };
     players = players.map(p =>
       p.id === state.lastPlayerId ? { ...p, cardCount: hands[p.id].length } : p
     );
     log = addLog(log,
-      `🚨 ¡Descubierto! ${liar?.name} mintió (era ${COLOR_NAME[actual.color]} ${VALUE_LABEL[actual.value]}). Robó ${drawn.length}.`
+      `🚨 ¡Descubierto! ${liar?.name} mintió (era ${COLOR_NAME[actual.color]} ${VALUE_LABEL[actual.value]}). Recuperó la carta y robó ${drawn.length} más.`
     );
 
     await db.collection('rooms').doc(currentRoomId).update({
@@ -1113,26 +1128,65 @@ async function handleChallenge() {
 
   } else {
     // Honesto: el desafiante roba 1 carta y se aplica el efecto
-    const { drawn, newDrawPile } = takeCards(drawPile, 1);
-    hands = { ...hands, [localUid]: [...(hands[localUid] || []), ...drawn] };
-    players = players.map(p =>
-      p.id === localUid ? { ...p, cardCount: hands[p.id].length } : p
-    );
     log = addLog(log,
-      `✓ ${liar?.name} dijo la verdad (${COLOR_NAME[actual.color]} ${VALUE_LABEL[actual.value]}). ${localName} roba ${drawn.length}.`
+      `✓ ${liar?.name} dijo la verdad (${COLOR_NAME[actual.color]} ${VALUE_LABEL[actual.value]}).`
     );
 
-    const advanced = applyEffectsAndAdvance({ ...state, hands, players, drawPile: newDrawPile });
-    log = addLog(log, advanced.logExtra);
+    if (claimed.value === '0') {
+      // Rotate hands first, then add drawn card to localUid's new (received) hand
+      const { drawn, newDrawPile } = takeCards(drawPile, 1);
+      const advanced = applyEffectsAndAdvance({ ...state, hands, players, drawPile: newDrawPile });
+      const postHands = { ...advanced.changes.hands, [localUid]: [...(advanced.changes.hands[localUid] || []), ...drawn] };
+      const postPlayers = advanced.changes.players.map(p =>
+        p.id === localUid ? { ...p, cardCount: postHands[p.id].length } : p
+      );
+      log = addLog(log, advanced.logExtra);
+      log = addLog(log, `${localName} robó ${drawn.length} tras el intercambio.`);
+      await db.collection('rooms').doc(currentRoomId).update({
+        ...advanced.changes,
+        hands: postHands,
+        players: postPlayers,
+        challengeOpen: false,
+        lastActualCard: null,
+        lastClaimedCard: null,
+        log,
+        lastActivity: firebase.firestore.FieldValue.serverTimestamp()
+      });
 
-    await db.collection('rooms').doc(currentRoomId).update({
-      ...advanced.changes,
-      challengeOpen: false,
-      lastActualCard: null,
-      lastClaimedCard: null,
-      log,
-      lastActivity: firebase.firestore.FieldValue.serverTimestamp()
-    });
+    } else if (claimed.value === '7') {
+      // Set sevenSwapPending without drawing; draw after swap resolves in executeSevenSwap
+      const advanced = applyEffectsAndAdvance({ ...state, hands, players, drawPile });
+      log = addLog(log, advanced.logExtra);
+      log = addLog(log, `${localName} robará 1 tras el intercambio de manos.`);
+      await db.collection('rooms').doc(currentRoomId).update({
+        ...advanced.changes,
+        pendingPenaltyDraw: { playerId: localUid, count: 1 },
+        challengeOpen: false,
+        lastActualCard: null,
+        lastClaimedCard: null,
+        log,
+        lastActivity: firebase.firestore.FieldValue.serverTimestamp()
+      });
+
+    } else {
+      // Default: draw first, then apply effects
+      const { drawn, newDrawPile } = takeCards(drawPile, 1);
+      hands = { ...hands, [localUid]: [...(hands[localUid] || []), ...drawn] };
+      players = players.map(p =>
+        p.id === localUid ? { ...p, cardCount: hands[p.id].length } : p
+      );
+      log = addLog(log, `${localName} roba ${drawn.length}.`);
+      const advanced = applyEffectsAndAdvance({ ...state, hands, players, drawPile: newDrawPile });
+      log = addLog(log, advanced.logExtra);
+      await db.collection('rooms').doc(currentRoomId).update({
+        ...advanced.changes,
+        challengeOpen: false,
+        lastActualCard: null,
+        lastClaimedCard: null,
+        log,
+        lastActivity: firebase.firestore.FieldValue.serverTimestamp()
+      });
+    }
   }
 }
 

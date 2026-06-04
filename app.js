@@ -154,6 +154,20 @@ let presenceRef    = null;
 let rtdbRoomRef    = null;
 const disconnectTimers = {};
 
+// Re-establish RTDB presence when the tab becomes visible again (mobile bg/fg)
+function refreshPresence() {
+  if (presenceRef && localUid) {
+    presenceRef.set({ name: localName, t: firebase.database.ServerValue.TIMESTAMP });
+    presenceRef.onDisconnect().remove();
+  }
+}
+document.addEventListener('visibilitychange', () => {
+  if (document.visibilityState === 'visible') refreshPresence();
+});
+window.addEventListener('focus', refreshPresence);
+// iOS/Android page lifecycle freeze/resume
+window.addEventListener('resume', refreshPresence);
+
 // Ephemeral play state (never stored in Firestore)
 let selectedCardIdx = null;
 let selectedActualCard = null;
@@ -495,7 +509,7 @@ function setupPresence(roomId) {
             if (roomState?.players.find(p => p.id === pid)) {
               await markPlayerDisconnected(pid, pname);
             }
-          }, 60000);
+          }, 180000);
         }
       } else {
         if (disconnectTimers[player.id]) {

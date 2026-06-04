@@ -146,6 +146,8 @@ const rtdb = firebase.database();
 let localUid  = null;
 let localName = null;
 let currentRoomId = null;
+let selectedEmoji = '';
+let _emojiPicker  = null;
 let roomUnsub     = null;
 let roomState     = null;
 
@@ -226,8 +228,17 @@ async function init() {
     console.error('Auth failed:', e);
   }
 
-  const savedRoom = sessionStorage.getItem('roomId');
-  const savedName = sessionStorage.getItem('playerName');
+  const savedRoom  = sessionStorage.getItem('roomId');
+  const savedName  = sessionStorage.getItem('playerName');
+  const savedEmoji = sessionStorage.getItem('playerEmoji');
+  if (savedEmoji) {
+    selectedEmoji = savedEmoji;
+    const btn = document.getElementById('emoji-trigger-btn');
+    if (btn) {
+      btn.querySelector('.emoji-face').textContent = savedEmoji;
+      btn.classList.add('has-emoji');
+    }
+  }
   if (savedRoom && savedName && localUid) {
     localName = savedName;
     await tryRejoin(savedRoom);
@@ -244,6 +255,10 @@ function esc(s) {
   return String(s)
     .replace(/&/g,'&amp;').replace(/</g,'&lt;')
     .replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+
+function stripLeadingEmoji(s) {
+  return s.replace(/^\p{Emoji_Presentation}\s*/u, '').trim();
 }
 
 const LOG_COLOR_HEX = { red:'#C81515', yellow:'#D4A800', green:'#189A20', blue:'#1040B8' };
@@ -303,6 +318,63 @@ function showLandingError(msg) {
 }
 
 // ============================================================
+// EMOJI PICKER
+// ============================================================
+
+function toggleEmojiPicker(e) {
+  e && e.stopPropagation();
+  if (selectedEmoji) {
+    clearEmoji();
+    return;
+  }
+  const wrap = document.getElementById('emoji-picker-wrap');
+  if (!wrap.classList.contains('hidden')) {
+    wrap.classList.add('hidden');
+    return;
+  }
+  if (!_emojiPicker) {
+    EmojiMart.init({
+      data: async () => {
+        const r = await fetch('https://cdn.jsdelivr.net/npm/@emoji-mart/data');
+        return r.json();
+      }
+    });
+    _emojiPicker = new EmojiMart.Picker({
+      theme: 'dark',
+      locale: 'en',
+      set: 'native',
+      onEmojiSelect(emoji) {
+        selectedEmoji = emoji.native;
+        const btn = document.getElementById('emoji-trigger-btn');
+        btn.querySelector('.emoji-face').textContent = emoji.native;
+        btn.classList.add('has-emoji');
+        sessionStorage.setItem('playerEmoji', selectedEmoji);
+        document.getElementById('emoji-picker-wrap').classList.add('hidden');
+      }
+    });
+    wrap.appendChild(_emojiPicker);
+  }
+  wrap.classList.remove('hidden');
+}
+
+function clearEmoji() {
+  selectedEmoji = '';
+  sessionStorage.removeItem('playerEmoji');
+  const btn = document.getElementById('emoji-trigger-btn');
+  btn.querySelector('.emoji-face').textContent = '🙂';
+  btn.classList.remove('has-emoji');
+}
+
+document.addEventListener('click', (e) => {
+  const wrap = document.getElementById('emoji-picker-wrap');
+  if (!wrap || wrap.classList.contains('hidden')) return;
+  const btn = document.getElementById('emoji-trigger-btn');
+  if (!wrap.contains(e.target) && !btn.contains(e.target)) {
+    wrap.classList.add('hidden');
+  }
+});
+
+// ============================================================
 // LANDING
 // ============================================================
 
@@ -311,9 +383,10 @@ function showJoin() {
 }
 
 async function handleCreate() {
-  const name = document.getElementById('player-name').value.trim();
-  if (!name) { showLandingError('Escribe tu nombre primero'); return; }
+  const rawName = document.getElementById('player-name').value.trim();
+  if (!rawName) { showLandingError('Escribe tu nombre primero'); return; }
   if (!localUid) { showLandingError('Aún conectando… intenta de nuevo'); return; }
+  const name = selectedEmoji ? selectedEmoji + ' ' + rawName : rawName;
   localName = name;
 
   const roomId = genRoomCode();
@@ -343,6 +416,7 @@ async function handleCreate() {
   currentRoomId = roomId;
   sessionStorage.setItem('roomId', roomId);
   sessionStorage.setItem('playerName', name);
+  sessionStorage.setItem('playerEmoji', selectedEmoji);
   subscribeToRoom(roomId);
   showScreen('lobby');
 }
@@ -355,11 +429,12 @@ function getUniqueName(desiredName, players) {
 }
 
 async function handleJoin() {
-  const name = document.getElementById('player-name').value.trim();
+  const rawName = document.getElementById('player-name').value.trim();
   const code = document.getElementById('room-code-input').value.trim().toUpperCase();
-  if (!name) { showLandingError('Escribe tu nombre primero'); return; }
+  if (!rawName) { showLandingError('Escribe tu nombre primero'); return; }
   if (code.length !== 6) { showLandingError('Introduce el código de sala de 6 caracteres'); return; }
   if (!localUid) { showLandingError('Aún conectando… intenta de nuevo'); return; }
+  const name = selectedEmoji ? selectedEmoji + ' ' + rawName : rawName;
 
   const snap = await db.collection('rooms').doc(code).get();
   if (!snap.exists) { showLandingError('Sala no encontrada'); return; }
@@ -382,11 +457,15 @@ async function handleJoin() {
     currentRoomId = code;
     sessionStorage.setItem('roomId', code);
     sessionStorage.setItem('playerName', localName);
+    sessionStorage.setItem('playerEmoji', selectedEmoji);
     subscribeToRoom(code);
     showScreen('lobby');
 
   } else if (data.status === 'playing') {
-    const existingPlayer = data.players.find(p => p.name === name);
+    // Try exact match, then match ignoring emoji prefix (for cross-device reconnect)
+    const existingPlayer = data.players.find(p =>
+      p.name === name || p.name === rawName || stripLeadingEmoji(p.name) === rawName
+    );
 
     if (existingPlayer) {
       // Reconnect: take over that player's slot, clear disconnected flag
@@ -407,11 +486,11 @@ async function handleJoin() {
           updates[`hands.${oldUid}`] = firebase.firestore.FieldValue.delete();
         }
         if (wasDisconnected) {
-          updates.log = addLog(data.log, `${name} se reconectó.`);
+          updates.log = addLog(data.log, `${existingPlayer.name} se reconectó.`);
         }
         await db.collection('rooms').doc(code).update(updates);
       }
-      localName = name;
+      localName = existingPlayer.name;
     } else {
       // New player joining mid-game: deal 7 cards from the draw pile
       if (data.players.length >= 10) { showLandingError('Sala llena (máximo 10)'); return; }
@@ -429,6 +508,7 @@ async function handleJoin() {
     currentRoomId = code;
     sessionStorage.setItem('roomId', code);
     sessionStorage.setItem('playerName', localName);
+    sessionStorage.setItem('playerEmoji', selectedEmoji);
     subscribeToRoom(code);
     showScreen('game');
   }
@@ -2381,6 +2461,7 @@ async function handleJoinAnother() {
   currentRoomId = code;
   sessionStorage.setItem('roomId', code);
   sessionStorage.setItem('playerName', localName);
+  sessionStorage.setItem('playerEmoji', selectedEmoji);
   subscribeToRoom(code);
   showScreen('lobby');
 }

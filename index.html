@@ -8,6 +8,7 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Oswald:wght@700&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="style.css">
+  <script src="https://cdn.jsdelivr.net/npm/emoji-mart@5/dist/browser.js"></script>
 </head>
 <body>
 
@@ -22,8 +23,12 @@
       <p>Si alguien cree que mientes, puede gritar <strong>¡Mentiroso!</strong> antes del siguiente turno. Si mentías: recuperas la carta y robas 1. Si decías la verdad: el desafiante roba 1.</p>
       <p>El <strong>7</strong> cambia tu mano con la de otro jugador. El <strong>0</strong> hace que todos pasen su mano en la dirección actual. Cuando te quede una carta, grita <strong>¡UNO!</strong></p>
     </div>
-    <div>
-      <input type="text" id="player-name" placeholder="Tu nombre" maxlength="16" autocomplete="off">
+    <div class="name-emoji-area">
+      <div class="name-input-row">
+        <button type="button" id="emoji-trigger-btn" class="emoji-trigger" onclick="toggleEmojiPicker(event)" title="Elige un emoji"><span class="emoji-face">🙂</span><span class="emoji-clear">×</span></button>
+        <input type="text" id="player-name" placeholder="Tu nombre" maxlength="16" autocomplete="off">
+      </div>
+      <div id="emoji-picker-wrap" class="emoji-picker-wrap hidden"></div>
     </div>
     <div class="btn-group">
       <button class="btn btn-primary" id="create-btn" onclick="handleCreate()">Crear sala</button>

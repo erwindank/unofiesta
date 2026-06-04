@@ -1220,6 +1220,12 @@ input[type=text]:focus { border-color: var(--blue); }
   box-shadow: 0 0 6px rgba(24,154,32,.7);
 }
 .wc-flip-wrong .card { opacity: .55; }
+.wc-flip-discarded .wc-flip-badge {
+  background: #555;
+  color: #ddd;
+  box-shadow: 0 0 6px rgba(0,0,0,.5);
+}
+.wc-flip-discarded .card { opacity: .55; }
 /* Log strip at bottom of wild challenge panel */
 .wc-log {
   border-top: 1px solid rgba(255,255,255,.1);

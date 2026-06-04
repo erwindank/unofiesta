@@ -1551,14 +1551,31 @@ async function accuseWildPlayer(targetId) {
       log, lastActivity: firebase.firestore.FieldValue.serverTimestamp()
     });
   } else {
-    // Found — remaining accusePool (excl. targetId) need to discard
+    // Found — flip all remaining unaccused players' cards face-up as 'discarded'
     const discardQueue = newAccusePool;
+    let finalFlipped = { ...newFlipped };
+    const newSubmittedAfterDiscard = { ...wc.submittedCards };
+    delete newSubmittedAfterDiscard[targetId];
+    const discardedDescriptions = [];
+    for (const rid of discardQueue) {
+      const rCard = wc.submittedCards[rid];
+      if (rCard) {
+        finalFlipped[rid] = { card: rCard, result: 'discarded' };
+        delete newSubmittedAfterDiscard[rid];
+        const rName = state.players.find(p => p.id === rid)?.name || '?';
+        discardedDescriptions.push(`${rName}: ${COLOR_NAME[rCard.color]} ${VALUE_LABEL[rCard.value]}`);
+      }
+    }
+    const discardNote = discardedDescriptions.length > 0
+      ? ` Cartas descartadas — ${discardedDescriptions.join(', ')}.`
+      : '';
     log = addLog(log,
-      `✅ ${localName} acusa a ${targetName} — ¡sí tenía ${COLOR_NAME[wc.chosenColor]}! Actividad terminada.`);
+      `✅ ${localName} acusa a ${targetName} — ¡sí tenía ${COLOR_NAME[wc.chosenColor]}! Actividad terminada.${discardNote}`);
 
     await db.collection('rooms').doc(currentRoomId).update({
       wildChallenge: { ...wc, accusePool: newAccusePool, foundPlayerId: targetId,
-        discardQueue, flippedCards: newFlipped,
+        submittedCards: newSubmittedAfterDiscard,
+        discardQueue, flippedCards: finalFlipped,
         phase: discardQueue.length > 0 ? 'resolving' : 'choosing' },
       log, lastActivity: firebase.firestore.FieldValue.serverTimestamp()
     });
@@ -1601,8 +1618,12 @@ function buildWcCardTable(wc, state) {
     const flippedEntry = flipped[pid];
     let cardHTML;
     if (flippedEntry) {
-      const cls = flippedEntry.result === 'correct' ? 'wc-flip-correct' : 'wc-flip-wrong';
-      const badge = flippedEntry.result === 'correct' ? '✓' : '✗';
+      const cls = flippedEntry.result === 'correct' ? 'wc-flip-correct'
+                : flippedEntry.result === 'discarded' ? 'wc-flip-discarded'
+                : 'wc-flip-wrong';
+      const badge = flippedEntry.result === 'correct' ? '✓'
+                  : flippedEntry.result === 'discarded' ? '✕'
+                  : '✗';
       cardHTML = `<div class="wc-slot-flipped ${cls}">${buildCardHTML(flippedEntry.card)}<div class="wc-flip-badge">${badge}</div></div>`;
     } else if (wc.submittedCards?.[pid]) {
       cardHTML = `<div class="wc-card-back"><span class="back-uno">UNO</span><span class="back-liars">LIARS</span></div>`;

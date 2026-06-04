@@ -2707,10 +2707,50 @@ async function toggleVoice() {
   }
 }
 
+// Modify SDP to prefer Opus with FEC, DTX, and higher bitrate for better voice quality
+function preferOpus(sdp) {
+  const lines = sdp.split('\r\n');
+  let opusPt = null;
+  for (const line of lines) {
+    const m = line.match(/^a=rtpmap:(\d+) opus\/48000\/2/i);
+    if (m) { opusPt = m[1]; break; }
+  }
+  if (!opusPt) return sdp;
+
+  const fmtpLine = `a=fmtp:${opusPt} minptime=10;useinbandfec=1;usedtx=1;maxaveragebitrate=64000`;
+  let hasFmtp = false;
+  const result = lines.map(line => {
+    if (line.startsWith('m=audio ')) {
+      const parts = line.split(' ');
+      const others = parts.slice(3).filter(p => p !== opusPt);
+      return [...parts.slice(0, 3), opusPt, ...others].join(' ');
+    }
+    if (line.startsWith(`a=fmtp:${opusPt} `)) {
+      hasFmtp = true;
+      return fmtpLine;
+    }
+    return line;
+  });
+  if (!hasFmtp) {
+    const idx = result.findIndex(l => l.startsWith(`a=rtpmap:${opusPt} `));
+    if (idx >= 0) result.splice(idx + 1, 0, fmtpLine);
+  }
+  return result.join('\r\n');
+}
+
 async function joinVoice() {
   if (!currentRoomId) return;
   try {
-    localStream = await navigator.mediaDevices.getUserMedia({ audio: true, video: false });
+    localStream = await navigator.mediaDevices.getUserMedia({
+      audio: {
+        echoCancellation: true,
+        noiseSuppression: true,
+        autoGainControl: true,
+        channelCount: 1,
+        sampleRate: { ideal: 48000 },
+      },
+      video: false,
+    });
   } catch (e) {
     showVoiceToast('No se pudo acceder al micrófono');
     return;
@@ -2747,10 +2787,11 @@ async function joinVoice() {
 async function initiateVoiceCall(targetUid) {
   const pc = createPeerConn(targetUid);
   try {
-    const offer = await pc.createOffer();
-    await pc.setLocalDescription(offer);
+    const offer = await pc.createOffer({ voiceActivityDetection: true });
+    const offerSdp = preferOpus(offer.sdp);
+    await pc.setLocalDescription({ type: offer.type, sdp: offerSdp });
     rtdb.ref(`voice/${currentRoomId}/signals/${targetUid}/${localUid}`)
-      .set({ type: 'offer', sdp: offer.sdp, ts: firebase.database.ServerValue.TIMESTAMP });
+      .set({ type: 'offer', sdp: offerSdp, ts: firebase.database.ServerValue.TIMESTAMP });
   } catch (e) {
     console.error('voice initiateCall:', e);
     closePeerConn(targetUid);
@@ -2762,10 +2803,11 @@ async function handleVoiceOffer(fromUid, sdp) {
   try {
     await pc.setRemoteDescription(new RTCSessionDescription({ type: 'offer', sdp }));
     pc._flushCandidates();
-    const answer = await pc.createAnswer();
-    await pc.setLocalDescription(answer);
+    const answer = await pc.createAnswer({ voiceActivityDetection: true });
+    const answerSdp = preferOpus(answer.sdp);
+    await pc.setLocalDescription({ type: answer.type, sdp: answerSdp });
     rtdb.ref(`voice/${currentRoomId}/signals/${fromUid}/${localUid}`)
-      .set({ type: 'answer', sdp: answer.sdp, ts: firebase.database.ServerValue.TIMESTAMP });
+      .set({ type: 'answer', sdp: answerSdp, ts: firebase.database.ServerValue.TIMESTAMP });
   } catch (e) {
     console.error('voice handleOffer:', e);
     closePeerConn(fromUid);
@@ -2808,9 +2850,16 @@ function createPeerConn(remoteUid) {
       audio = document.createElement('audio');
       audio.id = 'voice-audio-' + remoteUid;
       audio.autoplay = true;
+      audio.playsInline = true;
       document.body.appendChild(audio);
     }
     audio.srcObject = stream;
+    // Tune jitter buffer: 60ms balances latency vs. choppiness from network jitter
+    pc.getReceivers().forEach(recv => {
+      if (recv.track.kind === 'audio' && recv.jitterBufferTarget !== undefined) {
+        recv.jitterBufferTarget = 60;
+      }
+    });
     startSpeakingMonitor(remoteUid, stream);
   };
 

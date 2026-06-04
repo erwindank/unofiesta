@@ -2204,7 +2204,7 @@ async function handleReadyVote() {
 
 async function handleLeaveGame() {
   if (!roomState || !currentRoomId) { showScreen('landing'); return; }
-  if (!confirm('¿Seguro que quieres salir de la partida?')) return;
+  if (!confirm('¿Seguro que quieres salir?\n\nSi sales ahora no podrás ver la puntuación final ni serás incluido en el marcador.\n\nSi quieres terminar la partida y ver los resultados, usa el botón "Terminar" para votar por finalizar.')) return;
 
   const state = roomState;
   const roomId = currentRoomId;

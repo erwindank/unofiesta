@@ -74,6 +74,7 @@
     </button>
     <div class="game-topbar-actions">
       <button class="btn btn-ghost btn-sm" id="end-game-btn" onclick="handleEndGameVote()">Terminar</button>
+      <button class="btn btn-ghost btn-sm btn-chat" id="chat-toggle-btn" onclick="toggleChat()" title="Chat">💬<span id="chat-unread" class="chat-unread hidden">0</span></button>
       <button class="btn btn-danger btn-sm" onclick="handleLeaveGame()">Salir</button>
     </div>
   </div>
@@ -158,6 +159,31 @@
     <div id="winner-error" class="error hidden"></div>
   </div>
 </div>
+
+<!-- Chat Panel -->
+<div id="chat-panel" class="chat-panel hidden">
+  <div class="chat-header">
+    <span>Chat</span>
+    <button class="chat-close" onclick="toggleChat()">×</button>
+  </div>
+  <div id="chat-messages" class="chat-messages"></div>
+  <div class="chat-emotes">
+    <button class="chat-emote-btn" onclick="sendEmote('😂')">😂</button>
+    <button class="chat-emote-btn" onclick="sendEmote('👍')">👍</button>
+    <button class="chat-emote-btn" onclick="sendEmote('🤔')">🤔</button>
+    <button class="chat-emote-btn" onclick="sendEmote('😅')">😅</button>
+    <button class="chat-emote-btn" onclick="sendEmote('😮')">😮</button>
+    <button class="chat-emote-btn" onclick="sendEmote('🎉')">🎉</button>
+    <button class="chat-emote-btn" onclick="sendEmote('❤️')">❤️</button>
+    <button class="chat-emote-btn" onclick="sendEmote('🤡')">🤡</button>
+  </div>
+  <div class="chat-input-row">
+    <input type="text" id="chat-input" placeholder="Mensaje…" maxlength="100" autocomplete="off" onkeydown="handleChatKeydown(event)">
+    <button class="btn btn-primary btn-sm" onclick="handleChatSend()">→</button>
+  </div>
+</div>
+<!-- Speech bubble overlay -->
+<div id="speech-bubbles" class="speech-bubbles"></div>
 
 <!-- Seven Swap Dialog -->
 <div id="seven-swap-dialog" class="claim-dialog hidden">

@@ -181,6 +181,11 @@ let unoCallClearPending = false;
 let sevenSwapMode = null; // 'normal' | 'liar' | null
 let drawnCardState = null; // { cardIdx, canPlay } — set after drawing, cleared when turn ends
 
+// Chat state
+let chatOpen = false;
+let chatUnreadCount = 0;
+const seenMessageIds = new Set();
+
 function isLiarCard(card) {
   return card && card.liar === true;
 }
@@ -308,6 +313,10 @@ function showScreen(id) {
   document.getElementById('screen-' + id).classList.add('active');
   const gameCodeText = document.getElementById('game-room-code-text');
   if (gameCodeText) gameCodeText.textContent = currentRoomId || '';
+  if (id !== 'game' && chatOpen) {
+    chatOpen = false;
+    document.getElementById('chat-panel')?.classList.add('hidden');
+  }
 }
 
 function showLandingError(msg) {
@@ -817,6 +826,8 @@ function renderGame(state) {
   renderTurnActions(state);
   renderEndVoteStatus(state);
   renderWildChallenge(state);
+  renderChatPanel(state);
+  renderSpeechBubbles(state);
 
   const myTurn = isMyTurn(state) && !state.challengeOpen;
   const canDraw = myTurn && drawnCardState === null && !state.wildChallenge;
@@ -1137,6 +1148,122 @@ function renderLog(state) {
     })
     .join('');
   el.scrollTop = 0;
+}
+
+// ============================================================
+// CHAT
+// ============================================================
+
+function toggleChat() {
+  chatOpen = !chatOpen;
+  const panel = document.getElementById('chat-panel');
+  panel.classList.toggle('hidden', !chatOpen);
+  if (chatOpen) {
+    chatUnreadCount = 0;
+    updateChatBadge();
+    const el = document.getElementById('chat-messages');
+    if (el) el.scrollTop = el.scrollHeight;
+    setTimeout(() => document.getElementById('chat-input')?.focus(), 50);
+  }
+}
+
+function updateChatBadge() {
+  const badge = document.getElementById('chat-unread');
+  if (!badge) return;
+  if (chatUnreadCount > 0) {
+    badge.textContent = chatUnreadCount > 9 ? '9+' : String(chatUnreadCount);
+    badge.classList.remove('hidden');
+  } else {
+    badge.classList.add('hidden');
+  }
+}
+
+async function sendChatMessage(text) {
+  if (!text || !text.trim() || !currentRoomId) return;
+  const trimmed = text.trim();
+  await db.runTransaction(async tx => {
+    const ref  = db.collection('rooms').doc(currentRoomId);
+    const snap = await tx.get(ref);
+    if (!snap.exists) return;
+    const msgs = snap.data().messages || [];
+    const msg  = {
+      id:   Date.now().toString(36) + Math.random().toString(36).slice(2),
+      pid:  localUid,
+      name: localName,
+      text: trimmed,
+      ts:   Date.now()
+    };
+    tx.update(ref, { messages: [...msgs, msg].slice(-50) });
+  });
+}
+
+function sendEmote(emoji) {
+  sendChatMessage(emoji).catch(() => {});
+}
+
+async function handleChatSend() {
+  const input = document.getElementById('chat-input');
+  if (!input) return;
+  const text = input.value.trim();
+  if (!text) return;
+  input.value = '';
+  await sendChatMessage(text);
+}
+
+function handleChatKeydown(e) {
+  if (e.key === 'Enter') handleChatSend();
+}
+
+function renderChatPanel(state) {
+  const msgs = state.messages || [];
+
+  // Count new messages from others and mark all as seen
+  let newCount = 0;
+  for (const msg of msgs) {
+    if (!seenMessageIds.has(msg.id) && msg.pid !== localUid) newCount++;
+    seenMessageIds.add(msg.id);
+  }
+  if (!chatOpen && newCount > 0) {
+    chatUnreadCount += newCount;
+    updateChatBadge();
+  }
+
+  if (!chatOpen) return;
+
+  chatUnreadCount = 0;
+  updateChatBadge();
+
+  const el = document.getElementById('chat-messages');
+  if (!el) return;
+  const wasAtBottom = el.scrollHeight - el.scrollTop - el.clientHeight < 50;
+  el.innerHTML = msgs.map(msg => {
+    const mine = msg.pid === localUid;
+    return `<div class="chat-msg ${mine ? 'mine' : ''}">
+      ${!mine ? `<span class="chat-msg-name">${esc(msg.name)}</span>` : ''}
+      <div class="chat-msg-bubble">${esc(msg.text)}</div>
+    </div>`;
+  }).join('');
+  if (wasAtBottom || msgs.length <= 3) el.scrollTop = el.scrollHeight;
+}
+
+function renderSpeechBubbles(state) {
+  if (chatOpen) return;
+  const msgs = state.messages || [];
+  const container = document.getElementById('speech-bubbles');
+  if (!container) return;
+  const now = Date.now();
+  for (const msg of msgs) {
+    const bubbleKey = 'b_' + msg.id;
+    if (seenMessageIds.has(bubbleKey)) continue;
+    seenMessageIds.add(bubbleKey);
+    if (msg.pid === localUid) continue;
+    if (now - msg.ts > 6000) continue;
+    const bubble = document.createElement('div');
+    bubble.className = 'speech-bubble';
+    bubble.innerHTML = `<strong>${esc(msg.name)}:</strong> ${esc(msg.text)}`;
+    container.appendChild(bubble);
+    setTimeout(() => bubble.remove(), 4000);
+  }
 }
 
 // ============================================================

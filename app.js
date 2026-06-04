@@ -309,14 +309,17 @@ function nextPlayerIndex(state) {
 }
 
 function showScreen(id) {
+  if (id !== 'game') {
+    if (chatOpen) {
+      chatOpen = false;
+      document.getElementById('chat-panel')?.classList.add('hidden');
+    }
+    leaveVoice();
+  }
   document.querySelectorAll('.screen').forEach(s => s.classList.remove('active'));
   document.getElementById('screen-' + id).classList.add('active');
   const gameCodeText = document.getElementById('game-room-code-text');
   if (gameCodeText) gameCodeText.textContent = currentRoomId || '';
-  if (id !== 'game' && chatOpen) {
-    chatOpen = false;
-    document.getElementById('chat-panel')?.classList.add('hidden');
-  }
 }
 
 function showLandingError(msg) {
@@ -1007,12 +1010,16 @@ function renderOpponents(state) {
     const nextIdx = nextPlayerIndex(state);
     const isNext = state.players[nextIdx]?.id === p.id;
     const isDisconnected = !!p.disconnected;
+    const isSpeaking = !!speakingStates[p.id];
+    const hasVoice = !!peerConns[p.id];
     const miniCards = Array(Math.min(p.cardCount, 12)).fill(0)
       .map(() => `<div class="card-back mini"></div>`).join('');
     return `<div class="opponent ${isCurrent && !state.challengeOpen ? 'active-player' : ''}
                                   ${isNext && state.challengeOpen ? 'active-player' : ''}
-                                  ${isDisconnected ? 'player-disconnected' : ''}">
-      <div class="opponent-name">${esc(p.name)}${isDisconnected ? ' <span class="dc-badge">desconectado</span>' : ''}</div>
+                                  ${isDisconnected ? 'player-disconnected' : ''}
+                                  ${isSpeaking ? 'voice-speaking' : ''}"
+                 data-uid="${esc(p.id)}">
+      <div class="opponent-name">${esc(p.name)}${isDisconnected ? ' <span class="dc-badge">desconectado</span>' : ''}${hasVoice ? ' <span class="voice-mic-icon">🎤</span>' : ''}</div>
       <div class="opponent-cards">${miniCards}</div>
       <div class="opponent-count">${p.cardCount}🃏</div>
     </div>`;
@@ -2661,4 +2668,288 @@ window.addEventListener('beforeunload', () => {
     presenceRef.onDisconnect().cancel();
     presenceRef.remove();
   }
+  if (voiceActiveRef) {
+    voiceActiveRef.onDisconnect().cancel();
+    voiceActiveRef.remove();
+  }
 });
+
+// ============================================================
+// VOICE CHAT (WebRTC mesh, Firebase RTDB signaling)
+// ============================================================
+
+const STUN_CONFIG = {
+  iceServers: [
+    { urls: 'stun:stun.l.google.com:19302' },
+    { urls: 'stun:stun1.l.google.com:19302' }
+  ]
+};
+
+// voiceState cycles: 'off' → 'on' (unmuted) → 'muted' → 'off'
+let voiceState = 'off';
+let localStream = null;
+const peerConns = {};
+const voiceIceRefs = {};
+let voiceActiveRef = null;
+let voiceActiveRtdb = null;
+let voiceSignalRtdb = null;
+let audioCtx = null;
+const voiceAnalysers = {};
+const speakingStates = {};
+
+async function toggleVoice() {
+  if (voiceState === 'off') {
+    await joinVoice();
+  } else if (voiceState === 'on') {
+    muteVoice();
+  } else {
+    leaveVoice();
+  }
+}
+
+async function joinVoice() {
+  if (!currentRoomId) return;
+  try {
+    localStream = await navigator.mediaDevices.getUserMedia({ audio: true, video: false });
+  } catch (e) {
+    showVoiceToast('No se pudo acceder al micrófono');
+    return;
+  }
+
+  voiceState = 'on';
+  updateVoiceButton();
+  startSpeakingMonitor(localUid, localStream);
+
+  voiceActiveRef = rtdb.ref(`voice/${currentRoomId}/active/${localUid}`);
+  voiceActiveRef.set(true);
+  voiceActiveRef.onDisconnect().remove();
+
+  voiceActiveRtdb = rtdb.ref(`voice/${currentRoomId}/active`);
+  voiceActiveRtdb.on('child_added', snap => {
+    const uid = snap.key;
+    if (uid === localUid || peerConns[uid]) return;
+    if (localUid > uid) initiateVoiceCall(uid);
+    // else: the other peer (with higher uid) will initiate to us
+  });
+  voiceActiveRtdb.on('child_removed', snap => closePeerConn(snap.key));
+
+  voiceSignalRtdb = rtdb.ref(`voice/${currentRoomId}/signals/${localUid}`);
+  voiceSignalRtdb.on('child_added', snap => {
+    const fromUid = snap.key;
+    const data = snap.val();
+    snap.ref.remove();
+    if (!data) return;
+    if (data.type === 'offer') handleVoiceOffer(fromUid, data.sdp);
+    else if (data.type === 'answer') handleVoiceAnswer(fromUid, data.sdp);
+  });
+}
+
+async function initiateVoiceCall(targetUid) {
+  const pc = createPeerConn(targetUid);
+  try {
+    const offer = await pc.createOffer();
+    await pc.setLocalDescription(offer);
+    rtdb.ref(`voice/${currentRoomId}/signals/${targetUid}/${localUid}`)
+      .set({ type: 'offer', sdp: offer.sdp, ts: firebase.database.ServerValue.TIMESTAMP });
+  } catch (e) {
+    console.error('voice initiateCall:', e);
+    closePeerConn(targetUid);
+  }
+}
+
+async function handleVoiceOffer(fromUid, sdp) {
+  const pc = createPeerConn(fromUid);
+  try {
+    await pc.setRemoteDescription(new RTCSessionDescription({ type: 'offer', sdp }));
+    pc._flushCandidates();
+    const answer = await pc.createAnswer();
+    await pc.setLocalDescription(answer);
+    rtdb.ref(`voice/${currentRoomId}/signals/${fromUid}/${localUid}`)
+      .set({ type: 'answer', sdp: answer.sdp, ts: firebase.database.ServerValue.TIMESTAMP });
+  } catch (e) {
+    console.error('voice handleOffer:', e);
+    closePeerConn(fromUid);
+  }
+}
+
+async function handleVoiceAnswer(fromUid, sdp) {
+  const pc = peerConns[fromUid];
+  if (!pc) return;
+  try {
+    await pc.setRemoteDescription(new RTCSessionDescription({ type: 'answer', sdp }));
+    pc._flushCandidates();
+  } catch (e) {
+    console.error('voice handleAnswer:', e);
+  }
+}
+
+function createPeerConn(remoteUid) {
+  if (peerConns[remoteUid]) peerConns[remoteUid].close();
+
+  const pc = new RTCPeerConnection(STUN_CONFIG);
+  peerConns[remoteUid] = pc;
+
+  // Queue ICE candidates received before setRemoteDescription completes
+  const pending = [];
+  pc._flushCandidates = () => {
+    pending.splice(0).forEach(c =>
+      pc.addIceCandidate(new RTCIceCandidate(c)).catch(() => {})
+    );
+  };
+
+  if (localStream) {
+    localStream.getTracks().forEach(t => pc.addTrack(t, localStream));
+  }
+
+  pc.ontrack = e => {
+    const stream = e.streams[0] || new MediaStream([e.track]);
+    let audio = document.getElementById('voice-audio-' + remoteUid);
+    if (!audio) {
+      audio = document.createElement('audio');
+      audio.id = 'voice-audio-' + remoteUid;
+      audio.autoplay = true;
+      document.body.appendChild(audio);
+    }
+    audio.srcObject = stream;
+    startSpeakingMonitor(remoteUid, stream);
+  };
+
+  pc.onicecandidate = e => {
+    if (e.candidate && currentRoomId) {
+      rtdb.ref(`voice/${currentRoomId}/ice/${remoteUid}/${localUid}`)
+        .push(e.candidate.toJSON());
+    }
+  };
+
+  const iceRef = rtdb.ref(`voice/${currentRoomId}/ice/${localUid}/${remoteUid}`);
+  iceRef.on('child_added', snap => {
+    const candidate = snap.val();
+    snap.ref.remove();
+    if (pc.remoteDescription) {
+      pc.addIceCandidate(new RTCIceCandidate(candidate)).catch(() => {});
+    } else {
+      pending.push(candidate);
+    }
+  });
+  voiceIceRefs[remoteUid] = iceRef;
+
+  pc.onconnectionstatechange = () => {
+    if (pc.connectionState === 'failed') closePeerConn(remoteUid);
+  };
+
+  return pc;
+}
+
+function closePeerConn(uid) {
+  if (voiceIceRefs[uid]) { voiceIceRefs[uid].off(); delete voiceIceRefs[uid]; }
+  if (peerConns[uid]) { peerConns[uid].close(); delete peerConns[uid]; }
+  const a = document.getElementById('voice-audio-' + uid);
+  if (a) a.remove();
+  stopSpeakingMonitor(uid);
+  updateVoiceSpeaking(uid, false);
+}
+
+function muteVoice() {
+  voiceState = 'muted';
+  if (localStream) localStream.getAudioTracks().forEach(t => { t.enabled = false; });
+  updateVoiceButton();
+}
+
+function leaveVoice() {
+  if (voiceState === 'off') return;
+  const roomId = currentRoomId;
+  voiceState = 'off';
+
+  if (voiceActiveRef) {
+    voiceActiveRef.onDisconnect().cancel();
+    voiceActiveRef.remove();
+    voiceActiveRef = null;
+  }
+  if (voiceActiveRtdb) { voiceActiveRtdb.off(); voiceActiveRtdb = null; }
+  if (voiceSignalRtdb) { voiceSignalRtdb.off(); voiceSignalRtdb = null; }
+
+  Object.keys(peerConns).forEach(closePeerConn);
+
+  if (localStream) {
+    localStream.getTracks().forEach(t => t.stop());
+    localStream = null;
+  }
+  stopSpeakingMonitor(localUid);
+  Object.keys(speakingStates).forEach(uid => {
+    delete speakingStates[uid];
+    updateVoiceSpeaking(uid, false);
+  });
+
+  if (roomId) {
+    rtdb.ref(`voice/${roomId}/signals/${localUid}`).remove().catch(() => {});
+    rtdb.ref(`voice/${roomId}/ice/${localUid}`).remove().catch(() => {});
+  }
+  updateVoiceButton();
+}
+
+function startSpeakingMonitor(uid, stream) {
+  stopSpeakingMonitor(uid);
+  try {
+    if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+    const source = audioCtx.createMediaStreamSource(stream);
+    const analyser = audioCtx.createAnalyser();
+    analyser.fftSize = 256;
+    analyser.smoothingTimeConstant = 0.4;
+    source.connect(analyser);
+    const data = new Uint8Array(analyser.frequencyBinCount);
+    const timer = setInterval(() => {
+      analyser.getByteFrequencyData(data);
+      const avg = data.reduce((a, b) => a + b, 0) / data.length;
+      const speaking = avg > 8;
+      if (speaking !== speakingStates[uid]) {
+        speakingStates[uid] = speaking;
+        updateVoiceSpeaking(uid, speaking);
+      }
+    }, 100);
+    voiceAnalysers[uid] = { source, analyser, timer };
+  } catch (_) {}
+}
+
+function stopSpeakingMonitor(uid) {
+  const e = voiceAnalysers[uid];
+  if (!e) return;
+  clearInterval(e.timer);
+  try { e.source.disconnect(); } catch (_) {}
+  delete voiceAnalysers[uid];
+}
+
+function updateVoiceSpeaking(uid, speaking) {
+  if (uid === localUid) {
+    document.getElementById('voice-toggle-btn')
+      ?.classList.toggle('voice-self-speaking', speaking && voiceState === 'on');
+  } else {
+    document.querySelector(`.opponent[data-uid="${uid}"]`)
+      ?.classList.toggle('voice-speaking', speaking);
+  }
+}
+
+function updateVoiceButton() {
+  const btn = document.getElementById('voice-toggle-btn');
+  if (!btn) return;
+  btn.classList.remove('voice-active', 'voice-muted', 'voice-self-speaking');
+  if (voiceState === 'off') {
+    btn.textContent = '🎤';
+    btn.title = 'Unirse al chat de voz';
+  } else if (voiceState === 'on') {
+    btn.textContent = '🎤';
+    btn.title = 'Silenciar micrófono';
+    btn.classList.add('voice-active');
+  } else {
+    btn.textContent = '🔇';
+    btn.title = 'Salir del chat de voz';
+    btn.classList.add('voice-muted');
+  }
+}
+
+function showVoiceToast(msg) {
+  const el = document.getElementById('voice-toast');
+  if (!el) return;
+  el.textContent = msg;
+  el.classList.remove('hidden');
+  setTimeout(() => el.classList.add('hidden'), 3000);
+}

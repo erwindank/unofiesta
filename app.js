@@ -652,6 +652,21 @@ async function markPlayerDisconnected(uid, name) {
   }
 }
 
+function removeDisconnectedFromLobby(state) {
+  const newPlayers = state.players.filter(p => !p.disconnected);
+  if (newPlayers.length === 0) {
+    db.collection('rooms').doc(currentRoomId).delete().catch(() => {});
+    return;
+  }
+  const removedIds = state.players.filter(p => p.disconnected).map(p => p.id);
+  const update = {
+    players: newPlayers,
+    lastActivity: firebase.firestore.FieldValue.serverTimestamp()
+  };
+  if (removedIds.includes(state.hostId)) update.hostId = newPlayers[0].id;
+  db.collection('rooms').doc(currentRoomId).update(update).catch(() => {});
+}
+
 function skipDisconnectedTurn(state) {
   const current = state.players[state.currentPlayerIndex];
   db.collection('rooms').doc(currentRoomId).update({
@@ -677,6 +692,8 @@ function subscribeToRoom(roomId) {
 
 function onRoomUpdate(state) {
   if (state.status === 'lobby') {
+    const hasDisconnected = state.players.some(p => p.disconnected);
+    if (hasDisconnected) removeDisconnectedFromLobby(state);
     showScreen('lobby');
     renderLobby(state);
   } else if (state.status === 'playing') {
@@ -2408,6 +2425,36 @@ async function handleReadyVote() {
 // ============================================================
 // LEAVE GAME
 // ============================================================
+
+async function handleLeaveLobby() {
+  if (!roomState || !currentRoomId) { showScreen('landing'); return; }
+
+  const state = roomState;
+  const roomId = currentRoomId;
+  const newPlayers = state.players.filter(p => p.id !== localUid);
+  const newReadyVotes = (state.readyVotes || []).filter(id => id !== localUid);
+
+  teardownPresence();
+  if (roomUnsub) { roomUnsub(); roomUnsub = null; }
+  sessionStorage.clear();
+  currentRoomId = null;
+  roomState = null;
+  showScreen('landing');
+
+  if (newPlayers.length === 0) {
+    await db.collection('rooms').doc(roomId).delete().catch(() => {});
+    return;
+  }
+
+  const update = {
+    players: newPlayers,
+    readyVotes: newReadyVotes,
+    lastActivity: firebase.firestore.FieldValue.serverTimestamp()
+  };
+  if (state.hostId === localUid) update.hostId = newPlayers[0].id;
+
+  await db.collection('rooms').doc(roomId).update(update).catch(() => {});
+}
 
 async function handleLeaveGame() {
   if (!roomState || !currentRoomId) { showScreen('landing'); return; }

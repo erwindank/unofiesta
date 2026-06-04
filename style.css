@@ -463,7 +463,7 @@ input[type=text]:focus { border-color: var(--blue); }
   padding: .85rem;
   font-size: .9rem;
 }
-.draw-confirm-btns .btn:first-child { border-right: 1px solid var(--border); }
+.draw-confirm-btns .btn:not(:last-child) { border-right: 1px solid var(--border); }
 
 /* ---- CARDS ---- */
 .card {

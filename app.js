@@ -204,15 +204,11 @@ function computeStandings(state) {
 }
 
 function determineWinner(state) {
-  let best = null, bestCards = Infinity, bestPoints = Infinity;
-  for (const p of state.players) {
-    const hand = state.hands?.[p.id] || [];
-    const cards = hand.length, points = handPoints(hand);
-    if (cards < bestCards || (cards === bestCards && points < bestPoints)) {
-      bestCards = cards; bestPoints = points; best = p;
-    }
-  }
-  return { winner: best?.id, winnerName: best?.name };
+  const standings = computeStandings(state);
+  if (!standings.length) return { winner: null, winnerName: null, winCondition: 'cards' };
+  const first = standings[0], second = standings[1];
+  const winCondition = (second && first.cards === second.cards) ? 'points' : 'cards';
+  return { winner: first.id, winnerName: first.name, winCondition };
 }
 
 function isActualPlayable(card, state) {
@@ -709,6 +705,7 @@ function onRoomUpdate(state) {
         status: 'ended',
         winner: result.winner,
         winnerName: result.winnerName,
+        winCondition: result.winCondition,
         winnerReason: 'vote',
         log: addLog(state.log, `Partida terminada por acuerdo. ¡${result.winnerName} gana!`)
       }).catch(() => {});
@@ -2225,27 +2222,39 @@ function applyEffectsAndAdvance(state) {
 // DRAW CARD
 // ============================================================
 
-function showDrawConfirm(accent, icon, title, message) {
+function showDrawConfirm(accent, icon, title, message, okLabel, cancelLabel, thirdLabel) {
   return new Promise(resolve => {
     const card   = document.getElementById('draw-confirm-card');
     card.className = `draw-confirm-card accent-${accent}`;
     document.getElementById('draw-confirm-icon').textContent  = icon;
     document.getElementById('draw-confirm-title').textContent = title;
     document.getElementById('draw-confirm-msg').textContent   = message;
-    const modal  = document.getElementById('draw-confirm-modal');
-    const okBtn  = document.getElementById('draw-confirm-ok');
-    const canBtn = document.getElementById('draw-confirm-cancel');
+    const modal    = document.getElementById('draw-confirm-modal');
+    const okBtn    = document.getElementById('draw-confirm-ok');
+    const canBtn   = document.getElementById('draw-confirm-cancel');
+    const thirdBtn = document.getElementById('draw-confirm-third');
+    okBtn.textContent  = okLabel     || 'Sí, robar';
+    canBtn.textContent = cancelLabel || 'Cancelar';
+    if (thirdLabel) {
+      thirdBtn.textContent = thirdLabel;
+      thirdBtn.classList.remove('hidden');
+    } else {
+      thirdBtn.classList.add('hidden');
+    }
     modal.classList.remove('hidden');
     function done(result) {
       modal.classList.add('hidden');
       okBtn.removeEventListener('click', onOk);
       canBtn.removeEventListener('click', onCancel);
+      thirdBtn.removeEventListener('click', onThird);
       resolve(result);
     }
-    function onOk()     { done(true);  }
-    function onCancel() { done(false); }
+    function onOk()     { done(true);    }
+    function onCancel() { done(false);   }
+    function onThird()  { done('third'); }
     okBtn.addEventListener('click', onOk);
     canBtn.addEventListener('click', onCancel);
+    thirdBtn.addEventListener('click', onThird);
   });
 }
 
@@ -2465,7 +2474,14 @@ async function handleLeaveLobby() {
 
 async function handleLeaveGame() {
   if (!roomState || !currentRoomId) { showScreen('landing'); return; }
-  if (!confirm('¿Seguro que quieres salir?\n\nSi sales ahora no podrás ver la puntuación final ni serás incluido en el marcador.\n\nSi quieres terminar la partida y ver los resultados, usa el botón "Terminar" para votar por finalizar.')) return;
+  const ok = await showDrawConfirm(
+    'red', '🚪',
+    '¿Seguro que quieres salir?',
+    'Si sales ahora no podrás ver la puntuación final ni serás incluido en el marcador. Si quieres terminar la partida y ver los resultados, vota para finalizar.',
+    'Salir', 'Quedarme', 'Votar Terminar'
+  );
+  if (ok === 'third') { handleEndGameVote(); return; }
+  if (!ok) return;
 
   const state = roomState;
   const roomId = currentRoomId;
@@ -2592,7 +2608,8 @@ function renderWinner(state) {
 
   if (reason === 'vote') {
     titleEl.textContent = '🤝 ¡Partida terminada!';
-    nameEl.textContent  = `${state.winnerName || '?'} ganó con menos cartas`;
+    const winLabel = state.winCondition === 'points' ? 'ganó con menos puntos' : 'ganó con menos cartas';
+    nameEl.textContent  = `${state.winnerName || '?'} ${winLabel}`;
   } else if (reason === 'lastPlayer') {
     titleEl.textContent = '🏆 ¡Último en pie!';
     nameEl.textContent  = state.winnerName || '?';

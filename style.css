@@ -1466,6 +1466,12 @@ em-emoji-picker {
   background: rgba(26,78,187,.3);
   border-color: rgba(26,78,187,.55);
 }
+.chat-msg-time {
+  font-size: .6rem;
+  color: var(--muted);
+  padding: 0 .2rem;
+  opacity: .7;
+}
 .chat-emotes {
   display: flex;
   gap: .3rem;

@@ -1266,9 +1266,11 @@ function renderChatPanel(state) {
   const wasAtBottom = el.scrollHeight - el.scrollTop - el.clientHeight < 50;
   el.innerHTML = msgs.map(msg => {
     const mine = msg.pid === localUid;
+    const time = msg.ts ? new Date(msg.ts).toLocaleTimeString([], {hour: '2-digit', minute: '2-digit'}) : '';
     return `<div class="chat-msg ${mine ? 'mine' : ''}">
       ${!mine ? `<span class="chat-msg-name">${esc(msg.name)}</span>` : ''}
       <div class="chat-msg-bubble">${esc(msg.text)}</div>
+      ${time ? `<span class="chat-msg-time">${time}</span>` : ''}
     </div>`;
   }).join('');
   if (wasAtBottom || msgs.length <= 3) el.scrollTop = el.scrollHeight;

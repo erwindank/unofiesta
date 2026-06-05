@@ -1357,6 +1357,10 @@ function toggleNotifications() {
       notifEnabled = perm === 'granted';
       localStorage.setItem('notifEnabled', notifEnabled ? 'true' : 'false');
       updateNotifButton();
+      if (notifEnabled) {
+        try { new Notification('🔔 Notificaciones activadas', { body: 'Recibirás avisos del juego.', tag: 'notif-test' }); } catch (_) {}
+        showVoiceToast('🔔 Notificaciones activadas');
+      }
     });
   } else {
     notifEnabled = false;

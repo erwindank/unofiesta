@@ -628,6 +628,43 @@ function teardownPresence() {
     clearTimeout(disconnectTimers[uid]);
     delete disconnectTimers[uid];
   });
+  if (voiceActivityRef) { voiceActivityRef.off(); voiceActivityRef = null; }
+  voiceActivityLoaded = false;
+}
+
+function setupVoiceActivityListener(roomId) {
+  if (voiceActivityRef) { voiceActivityRef.off(); voiceActivityRef = null; }
+  voiceActivityLoaded = false;
+  const ref = rtdb.ref(`voice/${roomId}/active`);
+  voiceActivityRef = ref;
+  ref.on('child_added', snap => {
+    if (!voiceActivityLoaded) return;
+    const uid = snap.key;
+    if (uid === localUid) return;
+    const player = roomState?.players?.find(p => p.id === uid);
+    const name = player?.name || 'Alguien';
+    notify('🎤 Chat de voz', `${name} abrió el micrófono.`);
+    showVoiceJoinToast(`🎤 ${name} abrió el micrófono`);
+  });
+  ref.on('child_removed', snap => {
+    const uid = snap.key;
+    if (uid === localUid) return;
+    const player = roomState?.players?.find(p => p.id === uid);
+    const name = player?.name || 'Alguien';
+    showVoiceJoinToast(`📵 ${name} dejó el chat de voz`);
+  });
+  ref.on('child_changed', snap => {
+    const uid = snap.key;
+    if (uid === localUid) return;
+    const player = roomState?.players?.find(p => p.id === uid);
+    const name = player?.name || 'Alguien';
+    if (snap.val()?.muted) {
+      showVoiceJoinToast(`🔇 ${name} silenció el micrófono`);
+    } else {
+      showVoiceJoinToast(`🎤 ${name} activó el micrófono`);
+    }
+  });
+  ref.once('value', () => { voiceActivityLoaded = true; });
 }
 
 async function markPlayerDisconnected(uid, name) {
@@ -693,6 +730,7 @@ function subscribeToRoom(roomId) {
     onRoomUpdate(roomState);
   });
   setupPresence(roomId);
+  setupVoiceActivityListener(roomId);
 }
 
 function onRoomUpdate(state) {
@@ -2872,6 +2910,8 @@ const voiceIceRefs = {};
 let voiceActiveRef = null;
 let voiceActiveRtdb = null;
 let voiceSignalRtdb = null;
+let voiceActivityRef = null;
+let voiceActivityLoaded = false;
 let audioCtx = null;
 const voiceAnalysers = {};
 const speakingStates = {};
@@ -2882,7 +2922,7 @@ async function toggleVoice() {
   } else if (voiceState === 'on') {
     muteVoice();
   } else {
-    leaveVoice();
+    unmuteVoice();
   }
 }
 
@@ -2940,7 +2980,7 @@ async function joinVoice() {
   startSpeakingMonitor(localUid, localStream);
 
   voiceActiveRef = rtdb.ref(`voice/${currentRoomId}/active/${localUid}`);
-  voiceActiveRef.set(true);
+  voiceActiveRef.set({ muted: false });
   voiceActiveRef.onDisconnect().remove();
 
   voiceActiveRtdb = rtdb.ref(`voice/${currentRoomId}/active`);
@@ -3080,6 +3120,14 @@ function closePeerConn(uid) {
 function muteVoice() {
   voiceState = 'muted';
   if (localStream) localStream.getAudioTracks().forEach(t => { t.enabled = false; });
+  if (voiceActiveRef) voiceActiveRef.set({ muted: true });
+  updateVoiceButton();
+}
+
+function unmuteVoice() {
+  voiceState = 'on';
+  if (localStream) localStream.getAudioTracks().forEach(t => { t.enabled = true; });
+  if (voiceActiveRef) voiceActiveRef.set({ muted: false });
   updateVoiceButton();
 }
 
@@ -3178,6 +3226,15 @@ function showVoiceToast(msg) {
   const el = document.getElementById('voice-toast');
   if (!el) return;
   el.textContent = msg;
-  el.classList.remove('hidden');
+  el.classList.remove('hidden', 'voice-join');
   setTimeout(() => el.classList.add('hidden'), 3000);
+}
+
+function showVoiceJoinToast(msg) {
+  const el = document.getElementById('voice-toast');
+  if (!el) return;
+  el.textContent = msg;
+  el.classList.remove('hidden');
+  el.classList.add('voice-join');
+  setTimeout(() => { el.classList.add('hidden'); el.classList.remove('voice-join'); }, 3500);
 }

@@ -2055,22 +2055,14 @@ async function doPlayCard(actualCard, claimedCard, cardIndex) {
     lastClaimedCard: claimedCard,
     prevTopColor: state.topColor,
     prevTopValue: state.topValue,
-    challengeOpen: !won,
-    challengeBelieves: won ? firebase.firestore.FieldValue.delete() : [],
-    unoCallRequired: (newHand.length === 1 && !won)
+    challengeOpen: true,
+    challengeBelieves: [],
+    unoCallRequired: newHand.length === 1
       ? { playerId: localUid, playerName: localName }
       : firebase.firestore.FieldValue.delete(),
     log,
     lastActivity: firebase.firestore.FieldValue.serverTimestamp()
   };
-
-  if (won) {
-    update.status = 'ended';
-    update.winner = localUid;
-    update.winnerName = localName;
-    update.topColor = claimedCard.color;
-    update.topValue = claimedCard.value;
-  }
 
   await db.collection('rooms').doc(currentRoomId).update(update);
 }
@@ -2125,7 +2117,33 @@ async function handleChallenge() {
       `✓ ${localName} acusó a ${liar?.name}, pero ${liar?.name} dijo la Verdad (${actual?.value === 'wild' ? 'Comodín' : actual?.value === 'wild4' ? 'Comodín +4' : cardLogName(actual)}). ${localName} roba 1.`
     );
 
-    if (claimed.value === '0') {
+    const lastPlayerWon = (hands?.[state.lastPlayerId] || []).length === 0;
+    if (lastPlayerWon) {
+      // Last card was the truth — give accuser the penalty draw then end the game
+      const { drawn, newDrawPile } = takeCards(drawPile, 1);
+      const newHands = { ...hands, [localUid]: [...(hands[localUid] || []), ...drawn] };
+      const newPlayers = players.map(p =>
+        p.id === localUid ? { ...p, cardCount: newHands[p.id].length } : p
+      );
+      log = addLog(log, `${localName} roba ${drawn.length}.`);
+      await db.collection('rooms').doc(currentRoomId).update({
+        hands: newHands,
+        players: newPlayers,
+        drawPile: newDrawPile,
+        status: 'ended',
+        winner: state.lastPlayerId,
+        winnerName: liar?.name,
+        topColor: claimed.color,
+        topValue: claimed.value,
+        challengeOpen: false,
+        challengeBelieves: firebase.firestore.FieldValue.delete(),
+        lastActualCard: null,
+        lastClaimedCard: null,
+        log,
+        lastActivity: firebase.firestore.FieldValue.serverTimestamp()
+      });
+
+    } else if (claimed.value === '0') {
       // Rotate hands first, then add drawn card to localUid's new (received) hand
       const { drawn, newDrawPile } = takeCards(drawPile, 1);
       const advanced = applyEffectsAndAdvance({ ...state, hands, players, drawPile: newDrawPile });
@@ -2207,18 +2225,35 @@ async function handleBelieve() {
   let log = addLog(state.log, `${localName} confía en ${lp?.name}.`);
 
   if (allVoted) {
-    // Everyone has voted "Lo creo" — resolve the challenge
-    const advanced = applyEffectsAndAdvance(state);
-    log = addLog(log, advanced.logExtra);
-    await db.collection('rooms').doc(currentRoomId).update({
-      ...advanced.changes,
-      challengeOpen: false,
-      challengeBelieves: firebase.firestore.FieldValue.delete(),
-      lastActualCard: null,
-      lastClaimedCard: null,
-      log,
-      lastActivity: firebase.firestore.FieldValue.serverTimestamp()
-    });
+    const lastPlayerWon = (state.hands?.[state.lastPlayerId] || []).length === 0;
+    if (lastPlayerWon) {
+      await db.collection('rooms').doc(currentRoomId).update({
+        status: 'ended',
+        winner: state.lastPlayerId,
+        winnerName: lp?.name,
+        topColor: state.lastClaimedCard.color,
+        topValue: state.lastClaimedCard.value,
+        challengeOpen: false,
+        challengeBelieves: firebase.firestore.FieldValue.delete(),
+        lastActualCard: null,
+        lastClaimedCard: null,
+        log,
+        lastActivity: firebase.firestore.FieldValue.serverTimestamp()
+      });
+    } else {
+      // Everyone has voted "Lo creo" — resolve the challenge
+      const advanced = applyEffectsAndAdvance(state);
+      log = addLog(log, advanced.logExtra);
+      await db.collection('rooms').doc(currentRoomId).update({
+        ...advanced.changes,
+        challengeOpen: false,
+        challengeBelieves: firebase.firestore.FieldValue.delete(),
+        lastActualCard: null,
+        lastClaimedCard: null,
+        log,
+        lastActivity: firebase.firestore.FieldValue.serverTimestamp()
+      });
+    }
   } else {
     // Still waiting for other players
     await db.collection('rooms').doc(currentRoomId).update({

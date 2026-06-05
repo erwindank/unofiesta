@@ -1067,8 +1067,8 @@ function renderChallengeArea(state) {
     const believes = state.challengeBelieves || [];
     const alreadyBelieved = believes.includes(localUid);
 
-    // Build "waiting on" list
-    const eligible = state.players.filter(p => p.id !== state.lastPlayerId);
+    // Build "waiting on" list (skip disconnected players)
+    const eligible = state.players.filter(p => p.id !== state.lastPlayerId && !p.disconnected);
     const waiting  = eligible.filter(p => !believes.includes(p.id));
     const believed = eligible.filter(p => believes.includes(p.id));
 
@@ -2218,8 +2218,8 @@ async function handleBelieve() {
   const newBelieves = [...believes, localUid];
   const lp = state.players.find(p => p.id === state.lastPlayerId);
 
-  // Eligible voters = all players except the one who played the card
-  const eligible = state.players.filter(p => p.id !== state.lastPlayerId);
+  // Eligible voters = connected players except the one who played the card
+  const eligible = state.players.filter(p => p.id !== state.lastPlayerId && !p.disconnected);
   const allVoted = eligible.every(p => newBelieves.includes(p.id));
 
   let log = addLog(state.log, `${localName} confía en ${lp?.name}.`);

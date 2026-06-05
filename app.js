@@ -1190,6 +1190,7 @@ function toggleChat() {
   if (chatOpen) {
     chatUnreadCount = 0;
     updateChatBadge();
+    if (roomState) renderChatPanel(roomState);
     const el = document.getElementById('chat-messages');
     if (el) el.scrollTop = el.scrollHeight;
     setTimeout(() => document.getElementById('chat-input')?.focus(), 50);
@@ -1261,6 +1262,16 @@ function renderChatPanel(state) {
 
   chatUnreadCount = 0;
   updateChatBadge();
+
+  const playersEl = document.getElementById('chat-players');
+  if (playersEl) {
+    const players = state.players || [];
+    playersEl.innerHTML = players.map(p => {
+      const isMe = p.id === localUid;
+      const dc = p.disconnected;
+      return `<span class="chat-player-chip ${dc ? 'dc' : ''}">${esc(p.name)}${isMe ? ' (yo)' : ''}</span>`;
+    }).join('');
+  }
 
   const el = document.getElementById('chat-messages');
   if (!el) return;

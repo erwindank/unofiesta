@@ -1430,6 +1430,27 @@ em-emoji-picker {
   line-height: 1;
 }
 .chat-close:hover { color: var(--text); }
+.chat-players {
+  display: flex;
+  flex-wrap: wrap;
+  gap: .3rem;
+  padding: .4rem .75rem;
+  border-bottom: 1px solid var(--border);
+  flex-shrink: 0;
+}
+.chat-player-chip {
+  font-size: .7rem;
+  background: rgba(255,255,255,.08);
+  border: 1px solid var(--border);
+  border-radius: 20px;
+  padding: .15rem .55rem;
+  color: var(--text);
+  white-space: nowrap;
+}
+.chat-player-chip.dc {
+  opacity: .4;
+  text-decoration: line-through;
+}
 .chat-messages {
   flex: 1;
   overflow-y: auto;

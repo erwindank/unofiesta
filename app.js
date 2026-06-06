@@ -1923,9 +1923,8 @@ function showSpotifyError(msg) {
 
 // ============================================================
 // LAST.FM INTEGRATION
-// Polls user.getrecenttracks every 30s. Shows the track only when
-// the API returns @attr.nowplaying = "true" — so it goes dark when
-// the user pauses or stops.
+// Polls user.getrecenttracks every 30s. Always shows the most recent track;
+// uses @attr.nowplaying to distinguish "now playing" from "last played".
 // Works with any service the user has connected to Last.fm (Spotify,
 // Apple Music, Tidal, etc.) via scrobbling.
 // ============================================================
@@ -1987,13 +1986,15 @@ async function fetchLastfmNowPlaying() {
     }
     const tracks = data.recenttracks?.track;
     const track  = Array.isArray(tracks) ? tracks[0] : tracks;
-    if (track?.['@attr']?.nowplaying === 'true') {
-      const img = track.image?.find(i => i.size === 'medium')?.['#text'] || '';
+    if (track) {
+      const img       = track.image?.find(i => i.size === 'medium')?.['#text'] || '';
+      const isPlaying = track?.['@attr']?.nowplaying === 'true';
       updateSpotifyTrackInRoom({
-        title:    track.name,
-        artist:   track.artist['#text'],
-        albumArt: img.startsWith('http') ? img : null,
-        source:   'lastfm',
+        title:     track.name,
+        artist:    track.artist['#text'],
+        albumArt:  img.startsWith('http') ? img : null,
+        source:    'lastfm',
+        isPlaying,
       });
     } else {
       clearSpotifyTrackFromRoom();
@@ -2021,15 +2022,17 @@ function openLastfmModal() {
   if (username) {
     const raw   = spotifyTracksData[localUid];
     const track = raw?.source === 'lastfm' ? raw : null;
+    const trackLabel = track?.isPlaying ? 'Escuchando ahora' : 'Última escuchada';
     const trackHTML = track
       ? `<div class="lastfm-modal-track">
           ${track.albumArt ? `<img class="lastfm-modal-art" src="${esc(track.albumArt)}" alt="">` : ''}
           <div style="min-width:0">
+            <div class="lastfm-modal-track-label">${trackLabel}</div>
             <div class="lastfm-modal-track-title">${esc(track.title)}</div>
             <div class="lastfm-modal-track-artist">${esc(track.artist)}</div>
           </div>
         </div>`
-      : `<p class="lastfm-modal-desc">Nada reproduciendo ahora mismo.</p>`;
+      : `<p class="lastfm-modal-desc">Sin historial de Last.fm.</p>`;
     card.innerHTML = `
       ${LASTFM_SVG_LARGE}
       <div class="lastfm-modal-connected">● Conectado como ${esc(username)}</div>

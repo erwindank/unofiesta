@@ -1905,6 +1905,13 @@ em-emoji-picker {
   object-fit: cover;
   flex-shrink: 0;
 }
+.lastfm-modal-track-label {
+  font-size: .68rem;
+  color: var(--muted);
+  text-transform: uppercase;
+  letter-spacing: .04em;
+  margin-bottom: .1rem;
+}
 .lastfm-modal-track-title {
   font-size: .82rem;
   font-weight: 700;

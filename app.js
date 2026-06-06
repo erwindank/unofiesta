@@ -351,6 +351,7 @@ function showScreen(id) {
     leaveVoice();
     stopSpotifyPolling();
     stopDeezerPolling();
+    stopLastfmPolling();
     stopListeningSpotifyTracks();
   }
   document.querySelectorAll('.screen').forEach(s => s.classList.remove('active'));
@@ -361,8 +362,10 @@ function showScreen(id) {
     listenSpotifyTracks();
     if (isSpotifyConnected()) startSpotifyPolling();
     if (isDeezerConnected()) startDeezerPolling();
+    if (isLastfmConnected()) startLastfmPolling();
     updateSpotifyButton();
     updateDeezerButton();
+    updateLastfmButton();
     const cbOk  = sessionStorage.getItem('spotify_callback_ok');
     const cbErr = sessionStorage.getItem('spotify_callback_error');
     const dcOk  = sessionStorage.getItem('deezer_callback_ok');
@@ -1853,6 +1856,8 @@ function renderNowPlayingCarousel() {
       : `<div class="now-playing-art-placeholder">♪</div>`;
     const sourceLogo = track.source === 'deezer'
       ? `<svg class="now-playing-service-logo" viewBox="0 0 32 20" width="12" height="8" fill="#EF5466"><rect x="0" y="8" width="4" height="12" rx="1.5"/><rect x="7" y="5" width="4" height="15" rx="1.5"/><rect x="14" y="0" width="4" height="20" rx="1.5"/><rect x="21" y="5" width="4" height="15" rx="1.5"/><rect x="28" y="8" width="4" height="12" rx="1.5"/></svg>`
+      : track.source === 'lastfm'
+      ? `<svg class="now-playing-service-logo" viewBox="0 0 24 24" width="11" height="11" fill="#d51007"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm0 3c1.4 0 2.72.37 3.86 1.02L5.02 15.86A7.947 7.947 0 0 1 4 12c0-4.41 3.59-8 8-8zm0 14c-1.4 0-2.72-.37-3.86-1.02l10.84-10.84C19.63 9.28 20 10.6 20 12c0 4.41-3.59 8-8 8z"/></svg>`
       : `<svg class="now-playing-service-logo" viewBox="0 0 24 24" width="10" height="10" fill="#1DB954"><path d="M12 0C5.4 0 0 5.4 0 12s5.4 12 12 12 12-5.4 12-12S18.66 0 12 0zm5.521 17.34c-.24.359-.66.48-1.021.24-2.82-1.74-6.36-2.101-10.561-1.141-.418.122-.779-.179-.899-.539-.12-.421.18-.78.54-.9 4.56-1.021 8.52-.6 11.64 1.32.42.18.479.659.301 1.02zm1.44-3.3c-.301.42-.841.6-1.262.3-3.239-1.98-8.159-2.58-11.939-1.38-.479.12-1.02-.12-1.14-.6-.12-.48.12-1.021.6-1.141C9.6 9.9 15 10.561 18.72 12.84c.361.181.54.78.241 1.2zm.12-3.36C15.24 8.4 8.82 8.16 5.16 9.301c-.6.179-1.2-.181-1.38-.721-.18-.601.18-1.2.72-1.381 4.26-1.26 11.28-1.02 15.721 1.621.539.3.719 1.02.419 1.56-.299.421-1.02.599-1.559.3z"/></svg>`;
     return `<div class="now-playing-item">
       ${artHTML}
@@ -2097,6 +2102,156 @@ function showDeezerError(msg) {
       <button class="btn btn-ghost btn-sm" onclick="closeDeezerModal()">Cerrar</button>
     </div>`;
   document.getElementById('deezer-modal').classList.remove('hidden');
+}
+
+// ============================================================
+// LAST.FM INTEGRATION
+// Polls user.getrecenttracks every 30s. Shows the track only when
+// the API returns @attr.nowplaying = "true" — so it goes dark when
+// the user pauses or stops, unlike Deezer's history fallback.
+// Works with any service the user has connected to Last.fm (Spotify,
+// Apple Music, Tidal, etc.) via scrobbling.
+// ============================================================
+
+const LASTFM_API_KEY  = '80b47bbd69a91cddc6d615d8078a86d2';
+const LASTFM_API_BASE = 'https://ws.audioscrobbler.com/2.0/';
+const LASTFM_SVG_SMALL = `<svg viewBox="0 0 24 24" width="12" height="12" fill="#d51007"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm0 3c1.4 0 2.72.37 3.86 1.02L5.02 15.86A7.947 7.947 0 0 1 4 12c0-4.41 3.59-8 8-8zm0 14c-1.4 0-2.72-.37-3.86-1.02l10.84-10.84C19.63 9.28 20 10.6 20 12c0 4.41-3.59 8-8 8z"/></svg>`;
+const LASTFM_SVG_LARGE = `<svg class="lastfm-modal-logo" viewBox="0 0 24 24" width="40" height="40" fill="#d51007"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm0 3c1.4 0 2.72.37 3.86 1.02L5.02 15.86A7.947 7.947 0 0 1 4 12c0-4.41 3.59-8 8-8zm0 14c-1.4 0-2.72-.37-3.86-1.02l10.84-10.84C19.63 9.28 20 10.6 20 12c0 4.41-3.59 8-8 8z"/></svg>`;
+
+let lastfmPollTimer = null;
+
+function isLastfmConnected() {
+  return !!localStorage.getItem('lastfm_username');
+}
+
+function disconnectLastfm() {
+  stopLastfmPolling();
+  clearSpotifyTrackFromRoom();
+  localStorage.removeItem('lastfm_username');
+  updateLastfmButton();
+  closeLastfmModal();
+}
+
+async function connectLastfm() {
+  const input    = document.getElementById('lastfm-username-input');
+  const errEl    = document.getElementById('lastfm-input-error');
+  const username = input?.value.trim();
+  if (!username) return;
+  if (errEl) errEl.textContent = '';
+  try {
+    const res  = await fetch(`${LASTFM_API_BASE}?method=user.getinfo&user=${encodeURIComponent(username)}&api_key=${LASTFM_API_KEY}&format=json`);
+    const data = await res.json();
+    if (data.error) {
+      if (errEl) errEl.textContent = 'Usuario no encontrado en Last.fm.';
+      return;
+    }
+    localStorage.setItem('lastfm_username', data.user.name);
+    startLastfmPolling();
+    updateLastfmButton();
+    openLastfmModal();
+  } catch (e) {
+    if (errEl) errEl.textContent = 'Error de conexión. Intenta de nuevo.';
+  }
+}
+
+async function fetchLastfmNowPlaying() {
+  const username = localStorage.getItem('lastfm_username');
+  if (!username) return;
+  try {
+    const res  = await fetch(`${LASTFM_API_BASE}?method=user.getrecenttracks&user=${encodeURIComponent(username)}&api_key=${LASTFM_API_KEY}&format=json&limit=1`);
+    const data = await res.json();
+    if (data.error) {
+      if (data.error === 6) {
+        localStorage.removeItem('lastfm_username');
+        updateLastfmButton();
+      }
+      clearSpotifyTrackFromRoom();
+      return;
+    }
+    const tracks = data.recenttracks?.track;
+    const track  = Array.isArray(tracks) ? tracks[0] : tracks;
+    if (track?.['@attr']?.nowplaying === 'true') {
+      const img = track.image?.find(i => i.size === 'medium')?.['#text'] || '';
+      updateSpotifyTrackInRoom({
+        title:    track.name,
+        artist:   track.artist['#text'],
+        albumArt: img.startsWith('http') ? img : null,
+        source:   'lastfm',
+      });
+    } else {
+      clearSpotifyTrackFromRoom();
+    }
+  } catch (e) {
+    console.error('Last.fm fetch error:', e);
+  }
+}
+
+function startLastfmPolling() {
+  stopLastfmPolling();
+  fetchLastfmNowPlaying();
+  lastfmPollTimer = setInterval(fetchLastfmNowPlaying, 30000);
+}
+
+function stopLastfmPolling() {
+  clearInterval(lastfmPollTimer);
+  lastfmPollTimer = null;
+}
+
+function openLastfmModal() {
+  const card = document.getElementById('lastfm-modal-card');
+  if (!card) return;
+  const username = localStorage.getItem('lastfm_username');
+  if (username) {
+    const raw   = spotifyTracksData[localUid];
+    const track = raw?.source === 'lastfm' ? raw : null;
+    const trackHTML = track
+      ? `<div class="lastfm-modal-track">
+          ${track.albumArt ? `<img class="lastfm-modal-art" src="${esc(track.albumArt)}" alt="">` : ''}
+          <div style="min-width:0">
+            <div class="lastfm-modal-track-title">${esc(track.title)}</div>
+            <div class="lastfm-modal-track-artist">${esc(track.artist)}</div>
+          </div>
+        </div>`
+      : `<p class="lastfm-modal-desc">Nada reproduciendo ahora mismo.</p>`;
+    card.innerHTML = `
+      ${LASTFM_SVG_LARGE}
+      <div class="lastfm-modal-connected">● Conectado como ${esc(username)}</div>
+      ${trackHTML}
+      <div class="lastfm-modal-btns">
+        <button class="btn btn-ghost btn-sm" onclick="disconnectLastfm()">Desconectar</button>
+        <button class="btn btn-primary btn-sm" onclick="closeLastfmModal()">Cerrar</button>
+      </div>`;
+  } else {
+    card.innerHTML = `
+      ${LASTFM_SVG_LARGE}
+      <h3 class="lastfm-modal-title">Conectar Last.fm</h3>
+      <p class="lastfm-modal-desc">Introduce tu usuario de Last.fm para compartir lo que escuchas (funciona con Spotify, Apple Music, Tidal y más).</p>
+      <input id="lastfm-username-input" class="lastfm-username-input" type="text" placeholder="Tu usuario de Last.fm" autocomplete="off" onkeydown="if(event.key==='Enter')connectLastfm()">
+      <span id="lastfm-input-error" class="lastfm-input-error"></span>
+      <div class="lastfm-modal-btns">
+        <button class="btn lastfm-connect-btn btn-sm" onclick="connectLastfm()">Conectar</button>
+        <button class="btn btn-ghost btn-sm" onclick="closeLastfmModal()">Cancelar</button>
+      </div>`;
+    setTimeout(() => document.getElementById('lastfm-username-input')?.focus(), 50);
+  }
+  document.getElementById('lastfm-modal').classList.remove('hidden');
+}
+
+function closeLastfmModal() {
+  document.getElementById('lastfm-modal')?.classList.add('hidden');
+}
+
+function lastfmModalBackdropClick(e) {
+  if (e.target === document.getElementById('lastfm-modal')) closeLastfmModal();
+}
+
+function updateLastfmButton() {
+  const btn = document.getElementById('lastfm-btn');
+  if (!btn) return;
+  btn.classList.toggle('lastfm-active', isLastfmConnected());
+  btn.title = isLastfmConnected()
+    ? `Last.fm: ${localStorage.getItem('lastfm_username')}`
+    : 'Conectar Last.fm';
 }
 
 function notify(title, body) {

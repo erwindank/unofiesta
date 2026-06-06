@@ -1926,3 +1926,89 @@ em-emoji-picker {
 .deezer-connect-btn:hover { background: #f56677; border-color: #f56677; }
 
 .now-playing-service-logo { flex-shrink: 0; opacity: .85; }
+
+/* ---- LAST.FM BUTTON ---- */
+.btn-lastfm {
+  line-height: 1;
+  padding: .28rem .45rem;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--muted);
+  transition: color .2s;
+}
+.btn-lastfm.lastfm-active {
+  color: #d51007;
+  filter: drop-shadow(0 0 6px rgba(213,16,7,.6));
+}
+
+/* ---- LAST.FM MODAL ---- */
+.lastfm-modal-card .lastfm-modal-logo  { flex-shrink: 0; }
+.lastfm-modal-card .lastfm-modal-title { font-size: 1.05rem; font-weight: 700; }
+.lastfm-modal-card .lastfm-modal-desc  { font-size: .82rem; color: var(--muted); line-height: 1.4; }
+.lastfm-modal-card .lastfm-modal-btns  { display: flex; gap: .6rem; margin-top: .25rem; flex-wrap: wrap; justify-content: center; }
+.lastfm-modal-card .lastfm-modal-connected {
+  font-size: .78rem;
+  color: #d51007;
+  font-weight: 700;
+  display: flex;
+  align-items: center;
+  gap: .3rem;
+}
+.lastfm-modal-card .lastfm-modal-track {
+  display: flex;
+  align-items: center;
+  gap: .6rem;
+  background: rgba(213,16,7,.07);
+  border: 1px solid rgba(213,16,7,.2);
+  border-radius: 8px;
+  padding: .5rem .65rem;
+  width: 100%;
+  text-align: left;
+}
+.lastfm-modal-art {
+  width: 36px;
+  height: 36px;
+  border-radius: 4px;
+  object-fit: cover;
+  flex-shrink: 0;
+}
+.lastfm-modal-track-title {
+  font-size: .82rem;
+  font-weight: 700;
+  color: var(--text);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.lastfm-modal-track-artist {
+  font-size: .75rem;
+  color: var(--muted);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.lastfm-username-input {
+  width: 100%;
+  padding: .45rem .6rem;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--bg);
+  color: var(--text);
+  font-size: .85rem;
+  outline: none;
+  box-sizing: border-box;
+}
+.lastfm-username-input:focus { border-color: #d51007; }
+.lastfm-input-error {
+  font-size: .75rem;
+  color: #d51007;
+  min-height: 1em;
+}
+.lastfm-connect-btn {
+  background: #d51007;
+  border-color: #d51007;
+  color: #fff;
+  font-weight: 700;
+}
+.lastfm-connect-btn:hover { background: #f01a08; border-color: #f01a08; }

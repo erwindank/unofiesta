@@ -353,6 +353,19 @@ function showScreen(id) {
     listenSpotifyTracks();
     if (isSpotifyConnected()) startSpotifyPolling();
     updateSpotifyButton();
+    const cbOk  = sessionStorage.getItem('spotify_callback_ok');
+    const cbErr = sessionStorage.getItem('spotify_callback_error');
+    if (cbOk) {
+      sessionStorage.removeItem('spotify_callback_ok');
+      setTimeout(openSpotifyModal, 400);
+    } else if (cbErr) {
+      sessionStorage.removeItem('spotify_callback_error');
+      const msg = cbErr === 'access_denied'   ? 'Cancelaste la conexión con Spotify.'
+                : cbErr === 'verifier_missing' ? 'Error de sesión Spotify. Intenta de nuevo.'
+                : cbErr === 'fetch_failed'     ? 'No se pudo contactar Spotify. Revisa tu conexión.'
+                :                               `Error de Spotify: ${cbErr}`;
+      setTimeout(() => showSpotifyError(msg), 400);
+    }
   }
 }
 
@@ -1649,11 +1662,20 @@ async function initiateSpotifyAuth() {
 
 async function handleSpotifyCallback() {
   const params = new URLSearchParams(window.location.search);
+  const error  = params.get('error');
   const code   = params.get('code');
-  if (!code) return;
+  if (!code && !error) return;
   window.history.replaceState({}, '', window.location.pathname);
+  if (error) {
+    localStorage.removeItem('spotify_code_verifier');
+    sessionStorage.setItem('spotify_callback_error', error);
+    return;
+  }
   const verifier = localStorage.getItem('spotify_code_verifier');
-  if (!verifier) return;
+  if (!verifier) {
+    sessionStorage.setItem('spotify_callback_error', 'verifier_missing');
+    return;
+  }
   try {
     const res  = await fetch('https://accounts.spotify.com/api/token', {
       method: 'POST',
@@ -1671,8 +1693,15 @@ async function handleSpotifyCallback() {
       localStorage.setItem('spotify_access_token',  data.access_token);
       localStorage.setItem('spotify_refresh_token', data.refresh_token);
       localStorage.setItem('spotify_expires_at',    Date.now() + data.expires_in * 1000);
+      sessionStorage.setItem('spotify_callback_ok', '1');
+    } else {
+      console.error('Spotify token error:', data);
+      sessionStorage.setItem('spotify_callback_error', data.error || 'unknown');
     }
-  } catch (_) {}
+  } catch (e) {
+    console.error('Spotify fetch error:', e);
+    sessionStorage.setItem('spotify_callback_error', 'fetch_failed');
+  }
   localStorage.removeItem('spotify_code_verifier');
 }
 
@@ -1865,6 +1894,20 @@ function updateSpotifyButton() {
   if (!btn) return;
   btn.classList.toggle('spotify-active', isSpotifyConnected());
   btn.title = isSpotifyConnected() ? 'Spotify conectado' : 'Conectar Spotify';
+}
+
+function showSpotifyError(msg) {
+  const card = document.getElementById('spotify-modal-card');
+  if (!card) return;
+  card.innerHTML = `
+    ${SPOTIFY_SVG_LARGE}
+    <h3 class="spotify-modal-title">Error de Spotify</h3>
+    <p class="spotify-modal-desc" style="color:var(--color-danger,#e55)">${esc(msg)}</p>
+    <div class="spotify-modal-btns">
+      <button class="btn spotify-connect-btn btn-sm" onclick="initiateSpotifyAuth()">Reintentar</button>
+      <button class="btn btn-ghost btn-sm" onclick="closeSpotifyModal()">Cerrar</button>
+    </div>`;
+  document.getElementById('spotify-modal').classList.remove('hidden');
 }
 
 function notify(title, body) {

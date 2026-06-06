@@ -1706,7 +1706,7 @@ em-emoji-picker {
   gap: .4rem;
   background: rgba(29,185,84,.1);
   border: 1px solid rgba(29,185,84,.28);
-  border-radius: 24px;
+  border-radius: 6px;
   padding: .2rem .55rem .2rem .2rem;
   flex-shrink: 0;
   max-width: 210px;

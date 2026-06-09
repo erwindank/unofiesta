@@ -2873,8 +2873,8 @@ function showDrawnTogetherDialog(cardIndex) {
   selectedCardIdx = cardIndex;
   selectedActualCard = roomState?.hands?.[localUid]?.[cardIndex] || null;
   claimColor = roomState?.topColor || 'red';
-  renderDrawnTogetherDialog(roomState);
   document.getElementById('drawn-together-dialog').classList.remove('hidden');
+  renderDrawnTogetherDialog(roomState);
 }
 
 function cancelDrawnTogether() {

@@ -284,6 +284,47 @@
   <div id="lastfm-modal-card" class="spotify-modal-card lastfm-modal-card"></div>
 </div>
 
+<!-- Point Taken Overlay -->
+<div id="point-taken-overlay" class="pt-overlay hidden">
+  <div class="pt-inner">
+    <div class="pt-title">★ ¡Carta Apunta y Toma!</div>
+    <p class="pt-subtitle">Señala a alguien — el que reciba más señales roba cartas</p>
+    <div id="pt-targets" class="pt-targets"></div>
+    <div id="pt-voted" class="pt-voted hidden"></div>
+    <div id="pt-wait-msg" class="pt-wait"></div>
+  </div>
+</div>
+
+<!-- Wild Pile Up Panel -->
+<div id="pile-up-panel" class="pile-up-panel hidden">
+  <div class="pu-inner">
+    <div id="pu-title" class="pu-title"></div>
+    <div id="pu-holder" class="pu-holder"></div>
+    <div id="pu-cards" class="pu-cards"></div>
+    <button id="pu-take-btn" class="btn btn-danger hidden" onclick="handleTakePile()">Tomar la mini-pila</button>
+  </div>
+</div>
+
+<!-- Wild Drawn Together Dialog -->
+<div id="drawn-together-dialog" class="claim-dialog hidden">
+  <div class="claim-dialog-inner">
+    <h3>⬌ Wild Drawn Together — Elige 2 jugadores a enlazar</h3>
+    <div id="dt-players" class="dt-players"></div>
+    <div class="dt-section-label">Elige el color:</div>
+    <div id="dt-color-picker" class="claim-color-picker"></div>
+    <div class="claim-btns">
+      <button class="btn btn-ghost" onclick="cancelDrawnTogether()">Cancelar</button>
+      <button class="btn btn-primary" id="dt-confirm-btn" onclick="confirmDrawnTogether()" disabled>Enlazar</button>
+    </div>
+  </div>
+</div>
+
+<!-- Wild Draw 4 Challenge Area -->
+<div id="wild4-challenge-area" class="challenge-area hidden" style="position:fixed;bottom:calc(var(--hand-h,160px) + 4rem);left:50%;transform:translateX(-50%);z-index:60">
+  <p id="w4c-text"></p>
+  <div id="w4c-btns" class="challenge-btns"></div>
+</div>
+
 <!-- Firebase SDK -->
 <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore-compat.js"></script>

@@ -27,21 +27,21 @@ const FIREBASE_CONFIG = {
 const COLORS  = ['red', 'yellow', 'green', 'blue'];
 const NUMBERS = ['0','1','2','3','4','5','6','7','8','9'];
 const ACTIONS = ['skip','reverse','draw2'];
-const WILDS   = ['wild','wild4','wildc4Plus'];
-// UNO Party special cards
-const PARTY_CARDS = ['pointTaken','direction','link','wildPileUp','wildDrawnTogether','wildc4Plus'];
+const WILDS   = ['wild','wild4','wildPileUp','wildDrawnTogether','wildc4Plus'];
+// UNO Fiesta colored action cards (not wilds)
+const PARTY_CARDS = ['pointTaken'];
 const ALL_VALUES = [...NUMBERS, ...ACTIONS, ...WILDS, ...PARTY_CARDS];
 
 const VALUE_LABEL = {
   '0':'0','1':'1','2':'2','3':'3','4':'4',
   '5':'5','6':'6','7':'7','8':'8','9':'9',
   skip:'⊘', reverse:'⇄', draw2:'+2', wild:'C', wild4:'+4',
-  pointTaken:'★', direction:'◉', link:'⛓', wildPileUp:'⬆', wildDrawnTogether:'⬌', wildc4Plus:'+4'
+  pointTaken:'★', wildPileUp:'⬆', wildDrawnTogether:'⬌', wildc4Plus:'+4'
 };
 const CARD_POINTS = {
   '0':0,'1':1,'2':2,'3':3,'4':4,'5':5,'6':6,'7':7,'8':8,'9':9,
   skip:20, reverse:20, draw2:20, wild:50, wild4:50,
-  pointTaken:50, direction:50, link:50, wildPileUp:50, wildDrawnTogether:50, wildc4Plus:50
+  pointTaken:20, wildPileUp:50, wildDrawnTogether:50, wildc4Plus:50
 };
 const COLOR_NAME = { red:'Rojo', yellow:'Amarillo', green:'Verde', blue:'Azul', black:'Comodín' };
 
@@ -79,8 +79,8 @@ function cardLogName(card) {
 function buildCardHTML(card, extraStyle) {
   if (!card) return '';
   const lbl = VALUE_LABEL[card.value];
-  const isWild = WILDS.includes(card.value) || PARTY_CARDS.includes(card.value);
-  const isParty = PARTY_CARDS.includes(card.value) || card.value === 'wildc4Plus';
+  const isWild = WILDS.includes(card.value);
+  const isParty = ['pointTaken','wildPileUp','wildDrawnTogether'].includes(card.value);
   const centerHTML = isWild ? wildCenterHTML(card.value)
     : card.value === 'reverse' ? reverseCenterHTML()
     : `<span class="card-label center">${lbl}</span>`;
@@ -106,8 +106,6 @@ function wildCenterHTML(value) {
   if (value === 'wild4') label = '+4';
   else if (value === 'wildc4Plus') label = '+4';
   else if (value === 'pointTaken') label = '★';
-  else if (value === 'direction') label = '◉';
-  else if (value === 'link') label = '⛓';
   else if (value === 'wildPileUp') label = '⬆';
   else if (value === 'wildDrawnTogether') label = '⬌';
   
@@ -135,16 +133,15 @@ function createDeck() {
       deck.push({ color, value: a });
       deck.push({ color, value: a });
     }
-    // Party cards: one of each per color
-    for (const p of ['pointTaken','direction','link','wildPileUp','wildDrawnTogether']) {
-      deck.push({ color, value: p });
-    }
+    // Colored action card (1 per color)
+    deck.push({ color, value: 'pointTaken' });
   }
-  // Wilds and party wilds: 4 copies each
+  // Wild cards: 4 copies each (all black)
   for (let i = 0; i < 4; i++) {
     deck.push({ color: 'black', value: 'wild' });
     deck.push({ color: 'black', value: 'wild4' });
-    deck.push({ color: 'black', value: 'wildc4Plus' });
+    deck.push({ color: 'black', value: 'wildPileUp' });
+    deck.push({ color: 'black', value: 'wildDrawnTogether' });
   }
   return deck;
 }
@@ -255,7 +252,7 @@ function determineWinner(state) {
 
 function isActualPlayable(card, state) {
   if (!state || !card) return false;
-  if (card.value === 'wild') return true;
+  if (WILDS.includes(card.value)) return true;
   return card.color === state.topColor || card.value === state.topValue;
 }
 
@@ -962,6 +959,10 @@ function renderGame(state) {
   renderTurnActions(state);
   renderEndVoteStatus(state);
   renderWildChallenge(state);
+  renderPointTakenOverlay(state);
+  renderWildPileUpPanel(state);
+  renderDrawnTogetherDialog(state);
+  renderWild4ChallengeArea(state);
   renderChatPanel(state);
   renderSpeechBubbles(state);
 
@@ -970,7 +971,7 @@ function renderGame(state) {
   document.getElementById('draw-pile-area').style.opacity = canDraw ? '1' : '0.5';
 
   const myHand           = state.hands?.[localUid] || [];
-  const hasPlayable      = myHand.some(c => c.value === 'wild' || isActualPlayable(c, state));
+  const hasPlayable      = myHand.some(c => isActualPlayable(c, state));
   
   if (canDraw && !hasPlayable) {
     document.getElementById('draw-pile-area').classList.add('must-draw');
@@ -1203,19 +1204,39 @@ function renderHand(state) {
   const myTurn = isMyTurn(state) && !state.challengeOpen;
   const inDrawMode = myTurn && drawnCardState !== null;
 
+  // Pile-up phase: the pile holder sees only pile-playable cards highlighted
+  const pilePhase = state.wildPileUpPhase;
+  const isPileHolder = pilePhase && state.players[pilePhase.holderIndex]?.id === localUid;
+
+  // Speed play: cards clickable out of turn when they match both color+value
+  const canSpeedPlay = !myTurn && !state.challengeOpen && !pilePhase &&
+    !state.pointTakenPhase && !state.wild4Challenge;
+
   handEl.innerHTML = myHand.map((card, i) => {
     let isPlayable, onclick, extraClass = '';
+    const speedPlayable = canSpeedPlay && NUMBERS.includes(card.value) &&
+      card.color === state.topColor && card.value === state.topValue;
+    const pilePlayable = isPileHolder && (card.color === 'black' || card.color === pilePhase.pileColor);
+
     if (inDrawMode) {
       const isDrawn = i === drawnCardState.cardIdx;
       if (isDrawn) extraClass = ' drawn-fresh';
       isPlayable = myTurn;
       onclick = myTurn ? `selectCard(${i})` : '';
+    } else if (pilePlayable) {
+      isPlayable = true;
+      onclick = `selectCard(${i})`;
+      extraClass = ' speed-playable';
+    } else if (speedPlayable) {
+      isPlayable = true;
+      onclick = `selectCard(${i})`;
+      extraClass = ' speed-playable';
     } else {
       isPlayable = myTurn;
       onclick = myTurn ? `selectCard(${i})` : '';
     }
     const lbl = VALUE_LABEL[card.value];
-    const isWild = WILDS.includes(card.value) || PARTY_CARDS.includes(card.value);
+    const isWild = WILDS.includes(card.value);
     const centerHTML = isWild ? wildCenterHTML(card.value)
       : card.value === 'reverse' ? reverseCenterHTML()
       : `<span class="card-label center">${lbl}</span>`;
@@ -1229,7 +1250,12 @@ function renderHand(state) {
     </div>`;
   }).join('');
 
-  if (inDrawMode) {
+  if (isPileHolder) {
+    const hasMatch = myHand.some(c => c.color === 'black' || c.color === pilePhase.pileColor);
+    document.getElementById('hand-label').textContent = hasMatch
+      ? `Mini-pila (${COLOR_NAME[pilePhase.pileColor]}) — juega una carta que coincida o toca "Tomar pila"`
+      : `Mini-pila (${COLOR_NAME[pilePhase.pileColor]}) — no tienes cartas jugables`;
+  } else if (inDrawMode) {
     document.getElementById('hand-label').textContent = drawnCardState.canPlay
       ? '¡Carta robada jugable! Juega cualquier carta válida o pasa.'
       : 'Carta robada no jugable. Juega una carta válida o pasa.';
@@ -2146,9 +2172,34 @@ async function selectCard(index) {
   const card = myHand[index];
   if (!card) return;
 
+  // Speed Play: number card matching both color AND value when not your turn
+  if (!isMyTurn(roomState) && !roomState.challengeOpen && !roomState.wildPileUpPhase &&
+      !roomState.pointTakenPhase && !roomState.wild4Challenge) {
+    if (NUMBERS.includes(card.value) &&
+        card.color === roomState.topColor && card.value === roomState.topValue) {
+      await speedPlayCard(index, card);
+    }
+    return;
+  }
+
+  // Wild Pile Up phase: player must play on the pile or take it
+  if (roomState.wildPileUpPhase) {
+    const phase = roomState.wildPileUpPhase;
+    const holderPlayer = roomState.players[phase.holderIndex];
+    if (holderPlayer?.id === localUid) {
+      if (card.color === 'black' || card.color === phase.pileColor) {
+        await handlePlayOnPile(index);
+      }
+    }
+    return;
+  }
+
+  if (!isMyTurn(roomState)) return;
+  if (roomState.challengeOpen) return;
+
   if (drawnCardState !== null && index === drawnCardState.cardIdx && !drawnCardState.canPlay) return;
 
-  if (card.value !== 'wild' && !isActualPlayable(card, roomState)) {
+  if (!isActualPlayable(card, roomState)) {
     alert('No puedes jugar esta carta. Elige otra o roba.');
     return;
   }
@@ -2174,7 +2225,20 @@ async function selectCard(index) {
     ${cornerLabelHTML(card.value, 'br')}
   </div>`;
 
-  if (card.value === 'wild') {
+  if (card.value === 'pointTaken') {
+    document.getElementById('claim-dialog').classList.add('hidden');
+    await startPointTakenPhase(card, index);
+    selectedCardIdx = null;
+    selectedActualCard = null;
+  } else if (card.value === 'wildPileUp') {
+    document.getElementById('claim-dialog').classList.add('hidden');
+    await startWildPileUp(card, index);
+    selectedCardIdx = null;
+    selectedActualCard = null;
+  } else if (card.value === 'wildDrawnTogether') {
+    document.getElementById('claim-dialog').classList.add('hidden');
+    showDrawnTogetherDialog(index);
+  } else if (card.value === 'wild') {
     document.getElementById('claim-dialog-title').textContent = 'Elige el color del Comodín';
     document.getElementById('actual-card-preview').classList.add('hidden');
     renderClaimPicker();
@@ -2248,7 +2312,14 @@ async function confirmPlay() {
     return;
   }
 
-  if (actualCard.value === 'wild4' || actualCard.value === 'wildc4Plus') {
+  if (actualCard.value === 'wild4') {
+    document.getElementById('claim-dialog').classList.add('hidden');
+    await startWild4Challenge(actualCard, claimColor, selectedCardIdx);
+    selectedCardIdx = null;
+    selectedActualCard = null;
+    return;
+  }
+  if (actualCard.value === 'wildc4Plus') {
     document.getElementById('claim-dialog').classList.add('hidden');
     await startWildChallenge(actualCard, claimColor, selectedCardIdx);
     selectedCardIdx = null;
@@ -2711,6 +2782,539 @@ function renderSevenSwapOverlay(state) {
   showSevenSwapDialog();
 }
 
+// ============================================================
+// POINT TAKEN CARD
+// ============================================================
+
+async function startPointTakenPhase(card, cardIndex) {
+  const state = roomState;
+  const myHand = [...(state.hands?.[localUid] || [])];
+  const newHand = myHand.filter((_, i) => i !== cardIndex);
+  const newHands = { ...state.hands, [localUid]: newHand };
+  const players = state.players.map(p =>
+    p.id === localUid ? { ...p, cardCount: newHand.length } : p
+  );
+  const n = state.players.length;
+  const nextIdx = ((state.currentPlayerIndex + state.direction) % n + n) % n;
+  const log = addLog(state.log,
+    `${localName} jugó ★ Carta Apunta y Toma. ¡Todos apuntan a un jugador!`
+  );
+  await db.collection('rooms').doc(currentRoomId).update({
+    players, hands: newHands,
+    topColor: card.color, topValue: 'pointTaken',
+    pointTakenPhase: { triggerPlayerId: localUid, nextPlayerIndex: nextIdx, votes: {} },
+    linkedPlayers: firebase.firestore.FieldValue.delete(),
+    challengeOpen: false,
+    lastActualCard: null, lastClaimedCard: null,
+    log, lastActivity: firebase.firestore.FieldValue.serverTimestamp()
+  });
+}
+
+async function handlePointTakenVote(targetId) {
+  const state = roomState;
+  const phase = state.pointTakenPhase;
+  if (!phase || phase.votes[localUid]) return;
+
+  const newVotes = { ...phase.votes, [localUid]: targetId };
+  const eligible = state.players.filter(p => !p.disconnected);
+  const allVoted = eligible.every(p => newVotes[p.id]);
+
+  if (!allVoted) {
+    await db.collection('rooms').doc(currentRoomId).update({
+      'pointTakenPhase.votes': newVotes,
+      lastActivity: firebase.firestore.FieldValue.serverTimestamp()
+    });
+    return;
+  }
+
+  // All voted — tally and apply draws
+  let { hands, players, drawPile } = state;
+  let log = state.log;
+  const voteCounts = {};
+  for (const vid of Object.values(newVotes)) {
+    voteCounts[vid] = (voteCounts[vid] || 0) + 1;
+  }
+  const n = players.length;
+  for (let i = 0; i < n; i++) {
+    const p = players[(phase.nextPlayerIndex + i) % n];
+    const count = Math.min(voteCounts[p.id] || 0, 5);
+    if (count > 0) {
+      const { drawn, newDrawPile } = takeCards(drawPile, count);
+      drawPile = newDrawPile;
+      hands = { ...hands, [p.id]: [...(hands[p.id] || []), ...drawn] };
+      log = addLog(log, `${p.name} fue apuntado ${count} vez/veces → roba ${count}.`);
+    }
+  }
+  players = players.map(p => ({ ...p, cardCount: (hands[p.id] || []).length }));
+  await db.collection('rooms').doc(currentRoomId).update({
+    hands, players, drawPile,
+    pointTakenPhase: firebase.firestore.FieldValue.delete(),
+    currentPlayerIndex: phase.nextPlayerIndex,
+    log, lastActivity: firebase.firestore.FieldValue.serverTimestamp()
+  });
+}
+
+function renderPointTakenOverlay(state) {
+  const el = document.getElementById('point-taken-overlay');
+  const phase = state.pointTakenPhase;
+  if (!phase) { el.classList.add('hidden'); return; }
+  el.classList.remove('hidden');
+
+  const myVote = phase.votes[localUid];
+  const eligible = state.players.filter(p => !p.disconnected);
+  const voted = eligible.filter(p => phase.votes[p.id]).length;
+
+  document.getElementById('pt-wait-msg').textContent =
+    `${voted} / ${eligible.length} jugadores apuntaron`;
+
+  if (myVote) {
+    document.getElementById('pt-targets').classList.add('hidden');
+    document.getElementById('pt-voted').classList.remove('hidden');
+    const target = state.players.find(p => p.id === myVote);
+    document.getElementById('pt-voted').textContent = `✓ Apuntaste a ${esc(target?.name || '?')}`;
+  } else {
+    document.getElementById('pt-voted').classList.add('hidden');
+    document.getElementById('pt-targets').classList.remove('hidden');
+    const others = state.players.filter(p => p.id !== localUid && !p.disconnected);
+    document.getElementById('pt-targets').innerHTML = others.map(p =>
+      `<button class="btn btn-secondary pt-target-btn" onclick="handlePointTakenVote('${p.id}')">
+        👉 ${esc(p.name)}
+      </button>`
+    ).join('');
+  }
+}
+
+// ============================================================
+// WILD PILE UP CARD
+// ============================================================
+
+async function startWildPileUp(card, cardIndex) {
+  const state = roomState;
+  const myHand = [...(state.hands?.[localUid] || [])];
+  const newHand = myHand.filter((_, i) => i !== cardIndex);
+  const newHands = { ...state.hands, [localUid]: newHand };
+  const players = state.players.map(p =>
+    p.id === localUid ? { ...p, cardCount: newHand.length } : p
+  );
+  let { drawPile } = state;
+
+  // Draw cards from the pile until we get a non-Wild card
+  const pile = [];
+  for (let attempts = 0; attempts < 10; attempts++) {
+    const { drawn, newDrawPile } = takeCards(drawPile, 1);
+    if (!drawn.length) break;
+    drawPile = newDrawPile;
+    pile.push(drawn[0]);
+    if (drawn[0].color !== 'black') break;
+  }
+  const pileColor = pile.length ? pile[pile.length - 1].color : state.topColor;
+
+  const n = state.players.length;
+  const nextIdx = ((state.currentPlayerIndex + state.direction) % n + n) % n;
+
+  const log = addLog(state.log,
+    `${localName} jugó ⬆ Comodín Pila Salvaje. Mini-pila con ${pile.length} carta(s), color ${COLOR_NAME[pileColor]}.`
+  );
+  await db.collection('rooms').doc(currentRoomId).update({
+    players, hands: newHands, drawPile,
+    topColor: pileColor, topValue: 'wildPileUp',
+    wildPileUpPhase: { pile, pileColor, holderIndex: nextIdx },
+    challengeOpen: false,
+    lastActualCard: null, lastClaimedCard: null,
+    log, lastActivity: firebase.firestore.FieldValue.serverTimestamp()
+  });
+}
+
+async function handlePlayOnPile(cardIndex) {
+  const state = roomState;
+  const phase = state.wildPileUpPhase;
+  if (!phase) return;
+  const myPlayer = state.players[phase.holderIndex];
+  if (myPlayer?.id !== localUid) return;
+
+  const myHand = [...(state.hands?.[localUid] || [])];
+  const card = myHand[cardIndex];
+  if (!card) return;
+  // Validate: must be Wild or match pile color
+  if (card.color !== 'black' && card.color !== phase.pileColor) return;
+
+  const newHand = myHand.filter((_, i) => i !== cardIndex);
+  let newHands = { ...state.hands, [localUid]: newHand };
+  let players = state.players.map(p =>
+    p.id === localUid ? { ...p, cardCount: newHand.length } : p
+  );
+  // Wild cards do NOT change pile color
+  const newPile = [...phase.pile, card];
+  const newPileColor = phase.pileColor;
+
+  const n = players.length;
+  const nextIdx = ((phase.holderIndex + state.direction) % n + n) % n;
+  const nextHolder = players[nextIdx];
+  const nextHand = state.hands?.[nextHolder?.id] || [];
+  const nextCanPlay = nextHand.some(c => c.color === 'black' || c.color === newPileColor);
+
+  let log = addLog(state.log,
+    `${localName} jugó ${COLOR_NAME[card.color]} ${VALUE_LABEL[card.value]} en la mini-pila.`
+  );
+
+  if (!nextCanPlay && nextHolder && !nextHolder.disconnected) {
+    // Give entire pile to next holder — they can't play
+    newHands = { ...newHands, [nextHolder.id]: [...nextHand, ...newPile] };
+    players = players.map(p => ({ ...p, cardCount: (newHands[p.id] || []).length }));
+    const afterNextIdx = ((nextIdx + state.direction) % n + n) % n;
+    log = addLog(log,
+      `${nextHolder.name} no puede jugar → toma la mini-pila (${newPile.length} cartas). El color que continúa es ${COLOR_NAME[newPileColor]}.`
+    );
+    await db.collection('rooms').doc(currentRoomId).update({
+      hands: newHands, players,
+      topColor: newPileColor, topValue: 'wildPileUp',
+      wildPileUpPhase: firebase.firestore.FieldValue.delete(),
+      currentPlayerIndex: afterNextIdx,
+      log, lastActivity: firebase.firestore.FieldValue.serverTimestamp()
+    });
+  } else {
+    await db.collection('rooms').doc(currentRoomId).update({
+      hands: newHands, players,
+      topColor: newPileColor,
+      wildPileUpPhase: { ...phase, pile: newPile, pileColor: newPileColor, holderIndex: nextIdx },
+      log, lastActivity: firebase.firestore.FieldValue.serverTimestamp()
+    });
+  }
+}
+
+async function handleTakePile() {
+  const state = roomState;
+  const phase = state.wildPileUpPhase;
+  if (!phase) return;
+  const myPlayer = state.players[phase.holderIndex];
+  if (myPlayer?.id !== localUid) return;
+
+  let newHands = { ...state.hands };
+  let players = [...state.players];
+  const myHand = state.hands?.[localUid] || [];
+  newHands[localUid] = [...myHand, ...phase.pile];
+  players = players.map(p => ({ ...p, cardCount: (newHands[p.id] || []).length }));
+
+  const n = players.length;
+  const afterIdx = ((phase.holderIndex + state.direction) % n + n) % n;
+  const log = addLog(state.log,
+    `${localName} toma la mini-pila (${phase.pile.length} cartas). El color que continúa es ${COLOR_NAME[phase.pileColor]}.`
+  );
+  await db.collection('rooms').doc(currentRoomId).update({
+    hands: newHands, players,
+    topColor: phase.pileColor, topValue: 'wildPileUp',
+    wildPileUpPhase: firebase.firestore.FieldValue.delete(),
+    currentPlayerIndex: afterIdx,
+    log, lastActivity: firebase.firestore.FieldValue.serverTimestamp()
+  });
+}
+
+function renderWildPileUpPanel(state) {
+  const el = document.getElementById('pile-up-panel');
+  const phase = state.wildPileUpPhase;
+  if (!phase) { el.classList.add('hidden'); return; }
+  el.classList.remove('hidden');
+
+  const holder = state.players[phase.holderIndex];
+  const isHolder = holder?.id === localUid;
+  const myHand = state.hands?.[localUid] || [];
+  const hasMatch = myHand.some(c => c.color === 'black' || c.color === phase.pileColor);
+
+  document.getElementById('pu-title').innerHTML =
+    `⬆ Mini-Pila — color <strong style="color:${LOG_COLOR_HEX[phase.pileColor]}">${COLOR_NAME[phase.pileColor]}</strong>` +
+    ` (${phase.pile.length} carta${phase.pile.length !== 1 ? 's' : ''})`;
+  document.getElementById('pu-holder').textContent =
+    isHolder ? '¡Es tu turno! Juega una carta del color de la pila o toma la pila.'
+             : `Esperando que ${esc(holder?.name || '?')} juegue…`;
+  document.getElementById('pu-cards').innerHTML =
+    phase.pile.map(c => buildCardHTML(c)).join('');
+  const takePileBtn = document.getElementById('pu-take-btn');
+  if (isHolder) {
+    takePileBtn.classList.toggle('hidden', hasMatch);
+  } else {
+    takePileBtn.classList.add('hidden');
+  }
+}
+
+// ============================================================
+// WILD DRAWN TOGETHER CARD
+// ============================================================
+
+let drawnTogetherCardIndex = null;
+let drawnTogetherSelected = [];
+
+function showDrawnTogetherDialog(cardIndex) {
+  drawnTogetherCardIndex = cardIndex;
+  drawnTogetherSelected = [];
+  selectedCardIdx = cardIndex;
+  selectedActualCard = roomState?.hands?.[localUid]?.[cardIndex] || null;
+  claimColor = roomState?.topColor || 'red';
+  renderDrawnTogetherDialog(roomState);
+  document.getElementById('drawn-together-dialog').classList.remove('hidden');
+}
+
+function cancelDrawnTogether() {
+  document.getElementById('drawn-together-dialog').classList.add('hidden');
+  drawnTogetherCardIndex = null;
+  drawnTogetherSelected = [];
+  selectedCardIdx = null;
+  selectedActualCard = null;
+}
+
+function toggleDrawnTogetherPlayer(pid) {
+  const idx = drawnTogetherSelected.indexOf(pid);
+  if (idx === -1) {
+    if (drawnTogetherSelected.length < 2) drawnTogetherSelected.push(pid);
+  } else {
+    drawnTogetherSelected.splice(idx, 1);
+  }
+  renderDrawnTogetherDialog(roomState);
+}
+
+function setDTColor(color) { claimColor = color; renderDrawnTogetherDialog(roomState); }
+
+function renderDrawnTogetherDialog(state) {
+  const el = document.getElementById('drawn-together-dialog');
+  if (!state || el.classList.contains('hidden')) return;
+  const others = state.players.filter(p => p.id !== localUid && !p.disconnected);
+  document.getElementById('dt-players').innerHTML = others.map(p => {
+    const sel = drawnTogetherSelected.includes(p.id);
+    return `<button class="btn ${sel ? 'btn-primary' : 'btn-secondary'} dt-player-btn"
+      onclick="toggleDrawnTogetherPlayer('${p.id}')">
+      ${sel ? '⛓ ' : ''}${esc(p.name)}
+    </button>`;
+  }).join('');
+  document.getElementById('dt-color-picker').innerHTML = COLORS.map(c =>
+    `<button class="color-btn ${c} ${claimColor === c ? 'selected' : ''}"
+      onclick="setDTColor('${c}')" title="${COLOR_NAME[c]}"></button>`
+  ).join('');
+  const confirmBtn = document.getElementById('dt-confirm-btn');
+  confirmBtn.disabled = drawnTogetherSelected.length !== 2;
+}
+
+async function confirmDrawnTogether() {
+  if (drawnTogetherSelected.length !== 2 || drawnTogetherCardIndex === null) return;
+  document.getElementById('drawn-together-dialog').classList.add('hidden');
+  await startWildDrawnTogether(drawnTogetherCardIndex, [...drawnTogetherSelected], claimColor);
+  drawnTogetherCardIndex = null;
+  drawnTogetherSelected = [];
+  selectedCardIdx = null;
+  selectedActualCard = null;
+}
+
+async function startWildDrawnTogether(cardIndex, linkedIds, chosenColor) {
+  const state = roomState;
+  const myHand = [...(state.hands?.[localUid] || [])];
+  const newHand = myHand.filter((_, i) => i !== cardIndex);
+  const newHands = { ...state.hands, [localUid]: newHand };
+  const players = state.players.map(p =>
+    p.id === localUid ? { ...p, cardCount: newHand.length } : p
+  );
+  const p1 = state.players.find(p => p.id === linkedIds[0])?.name || '?';
+  const p2 = state.players.find(p => p.id === linkedIds[1])?.name || '?';
+  const log = addLog(state.log,
+    `${localName} jugó ⬌ Wild Drawn Together. ¡${p1} y ${p2} están enlazados! Color: ${COLOR_NAME[chosenColor]}.`
+  );
+  await db.collection('rooms').doc(currentRoomId).update({
+    players, hands: newHands,
+    topColor: chosenColor, topValue: 'wildDrawnTogether',
+    linkedPlayers: linkedIds,
+    currentPlayerIndex: nextPlayerIndex(state),
+    challengeOpen: false,
+    lastActualCard: null, lastClaimedCard: null,
+    log, lastActivity: firebase.firestore.FieldValue.serverTimestamp()
+  });
+}
+
+// ============================================================
+// WILD DRAW 4 — UNO FIESTA CHALLENGE
+// ============================================================
+
+async function startWild4Challenge(actualCard, chosenColor, cardIndex) {
+  const state = roomState;
+  const myHand = [...(state.hands?.[localUid] || [])];
+  const newHand = myHand.filter((_, i) => i !== cardIndex);
+  const newHands = { ...state.hands, [localUid]: newHand };
+  const players = state.players.map(p =>
+    p.id === localUid ? { ...p, cardCount: newHand.length } : p
+  );
+  const n = state.players.length;
+  const targetIdx = ((state.currentPlayerIndex + state.direction) % n + n) % n;
+  const target = state.players[targetIdx];
+  const prevTopColor = state.topColor;
+
+  const log = addLog(state.log,
+    `${localName} jugó +4 y eligió ${COLOR_NAME[chosenColor]}. ${target?.name || '?'} puede aceptar o desafiar.`
+  );
+  await db.collection('rooms').doc(currentRoomId).update({
+    players, hands: newHands,
+    topColor: chosenColor, topValue: 'wild4',
+    prevTopColor,
+    wild4Challenge: {
+      chooserId: localUid, chooserName: localName,
+      targetId: target?.id, targetName: target?.name,
+      targetIndex: targetIdx, chosenColor, prevTopColor,
+      nextPlayerIndex: ((targetIdx + state.direction) % n + n) % n
+    },
+    currentPlayerIndex: targetIdx,
+    challengeOpen: false,
+    lastActualCard: null, lastClaimedCard: null,
+    log, lastActivity: firebase.firestore.FieldValue.serverTimestamp()
+  });
+}
+
+async function handleWild4Accept() {
+  const state = roomState;
+  const ch = state.wild4Challenge;
+  if (!ch || ch.targetId !== localUid) return;
+
+  let { hands, players, drawPile } = state;
+  // Target draws 4
+  const { drawn, newDrawPile } = takeCards(drawPile, 4);
+  drawPile = newDrawPile;
+  hands = { ...hands, [localUid]: [...(hands[localUid] || []), ...drawn] };
+  // Linked partner draws 4 too
+  const linked = state.linkedPlayers;
+  if (linked?.includes(localUid)) {
+    const partnerId = linked[0] === localUid ? linked[1] : linked[0];
+    const partner = players.find(p => p.id === partnerId && !p.disconnected);
+    if (partner) {
+      const { drawn: pd, newDrawPile: npd } = takeCards(drawPile, 4);
+      drawPile = npd;
+      hands = { ...hands, [partnerId]: [...(hands[partnerId] || []), ...pd] };
+    }
+  }
+  players = players.map(p => ({ ...p, cardCount: (hands[p.id] || []).length }));
+  const log = addLog(state.log,
+    `${localName} acepta: roba 4 y pierde su turno.`
+  );
+  await db.collection('rooms').doc(currentRoomId).update({
+    hands, players, drawPile,
+    wild4Challenge: firebase.firestore.FieldValue.delete(),
+    currentPlayerIndex: ch.nextPlayerIndex,
+    log, lastActivity: firebase.firestore.FieldValue.serverTimestamp()
+  });
+}
+
+async function handleWild4Challenge() {
+  const state = roomState;
+  const ch = state.wild4Challenge;
+  if (!ch || ch.targetId !== localUid) return;
+
+  const chooserHand = state.hands?.[ch.chooserId] || [];
+  // Wild cards also count as a "match"
+  const hadMatch = chooserHand.some(c =>
+    c.color === ch.prevTopColor || WILDS.includes(c.value)
+  );
+
+  let { hands, players, drawPile } = state;
+  let log = state.log;
+  const n = players.length;
+
+  if (hadMatch) {
+    // Challenge succeeded: chooser draws 4, target draws 0, target goes next
+    const { drawn, newDrawPile } = takeCards(drawPile, 4);
+    drawPile = newDrawPile;
+    hands = { ...hands, [ch.chooserId]: [...(hands[ch.chooserId] || []), ...drawn] };
+    players = players.map(p => ({ ...p, cardCount: (hands[p.id] || []).length }));
+    log = addLog(log,
+      `🚨 ${localName} desafió a ${ch.chooserName} — ¡tenía ${COLOR_NAME[ch.prevTopColor]}! ${ch.chooserName} roba 4. Turno de ${localName}.`
+    );
+    await db.collection('rooms').doc(currentRoomId).update({
+      hands, players, drawPile,
+      wild4Challenge: firebase.firestore.FieldValue.delete(),
+      currentPlayerIndex: ch.targetIndex,
+      log, lastActivity: firebase.firestore.FieldValue.serverTimestamp()
+    });
+  } else {
+    // Challenge failed: target draws 6, loses turn
+    const { drawn, newDrawPile } = takeCards(drawPile, 6);
+    drawPile = newDrawPile;
+    hands = { ...hands, [localUid]: [...(hands[localUid] || []), ...drawn] };
+    // Linked partner draws 6 too
+    const linked = state.linkedPlayers;
+    if (linked?.includes(localUid)) {
+      const partnerId = linked[0] === localUid ? linked[1] : linked[0];
+      const partner = players.find(p => p.id === partnerId && !p.disconnected);
+      if (partner) {
+        const { drawn: pd, newDrawPile: npd } = takeCards(drawPile, 6);
+        drawPile = npd;
+        hands = { ...hands, [partnerId]: [...(hands[partnerId] || []), ...pd] };
+      }
+    }
+    players = players.map(p => ({ ...p, cardCount: (hands[p.id] || []).length }));
+    log = addLog(log,
+      `${localName} desafió pero ${ch.chooserName} no tenía ${COLOR_NAME[ch.prevTopColor]}. ${localName} roba 6 y pierde su turno.`
+    );
+    await db.collection('rooms').doc(currentRoomId).update({
+      hands, players, drawPile,
+      wild4Challenge: firebase.firestore.FieldValue.delete(),
+      currentPlayerIndex: ch.nextPlayerIndex,
+      log, lastActivity: firebase.firestore.FieldValue.serverTimestamp()
+    });
+  }
+}
+
+function renderWild4ChallengeArea(state) {
+  const el = document.getElementById('wild4-challenge-area');
+  const ch = state.wild4Challenge;
+  if (!ch) { el.classList.add('hidden'); return; }
+
+  const isTarget = ch.targetId === localUid;
+  el.classList.remove('hidden');
+  document.getElementById('w4c-text').innerHTML =
+    `<strong>${esc(ch.chooserName)}</strong> jugó <b>+4</b> y eligió color <strong style="color:${LOG_COLOR_HEX[ch.chosenColor]}">${COLOR_NAME[ch.chosenColor]}</strong>.`;
+
+  const btns = document.getElementById('w4c-btns');
+  if (isTarget) {
+    btns.innerHTML = `
+      <button class="btn btn-secondary" onclick="handleWild4Accept()">Robar 4 y pasar</button>
+      <button class="btn btn-danger"    onclick="handleWild4Challenge()">¡Desafiar!</button>`;
+  } else {
+    btns.innerHTML = `<p style="font-size:.8rem;color:rgba(255,255,255,.55)">Esperando que ${esc(ch.targetName || '?')} decida…</p>`;
+  }
+}
+
+// ============================================================
+// SPEED PLAY
+// ============================================================
+
+async function speedPlayCard(index, card) {
+  const state = roomState;
+  // Re-validate: card must still match both color and value of current top
+  if (!NUMBERS.includes(card.value)) return;
+  if (card.color !== state.topColor || card.value !== state.topValue) return;
+
+  const myHand = [...(state.hands?.[localUid] || [])];
+  const newHand = myHand.filter((_, i) => i !== index);
+  const won = newHand.length === 0;
+  const newHands = { ...state.hands, [localUid]: newHand };
+  let players = state.players.map(p =>
+    p.id === localUid ? { ...p, cardCount: newHand.length } : p
+  );
+
+  // Find my index and compute next player from me
+  const myIdx = state.players.findIndex(p => p.id === localUid);
+  const n = state.players.length;
+  const nextIdx = ((myIdx + state.direction) % n + n) % n;
+
+  const log = addLog(state.log,
+    `⚡ ${localName} jugó fuera de turno: ${COLOR_NAME[card.color]} ${VALUE_LABEL[card.value]}!`
+  );
+  const update = {
+    players, hands: newHands,
+    topColor: card.color, topValue: card.value,
+    currentPlayerIndex: nextIdx,
+    challengeOpen: false,
+    log, lastActivity: firebase.firestore.FieldValue.serverTimestamp()
+  };
+  update.unoCallRequired = (!won && newHand.length === 1)
+    ? { playerId: localUid, playerName: localName }
+    : firebase.firestore.FieldValue.delete();
+  if (won) { update.status = 'ended'; update.winner = localUid; update.winnerName = localName; }
+  await db.collection('rooms').doc(currentRoomId).update(update);
+}
+
 async function playNormalCard(actualCard, cardIndex, chosenColor = null) {
   const state = roomState;
   const myHand = [...(state.hands?.[localUid] || [])];
@@ -2767,7 +3371,7 @@ async function playNormalCard(actualCard, cardIndex, chosenColor = null) {
 }
 
 function isClaimPlayable(claimed, state) {
-  if (WILDS.includes(claimed.value)) return true;
+  if (WILDS.includes(claimed.value) || PARTY_CARDS.includes(claimed.value)) return true;
   return claimed.color === state.topColor || claimed.value === state.topValue;
 }
 
@@ -3085,15 +3689,29 @@ function applyEffectsAndAdvance(state) {
 
     case 'draw2': {
       const tid = players[nextIdx].id;
-      const { drawn, newDrawPile } = takeCards(drawPile, 2);
+      let { drawn, newDrawPile } = takeCards(drawPile, 2);
       drawPile = newDrawPile;
-      hands    = { ...hands, [tid]: [...(hands[tid] || []), ...drawn] };
-      players  = players.map(p => p.id === tid ? { ...p, cardCount: hands[p.id].length } : p);
+      hands = { ...hands, [tid]: [...(hands[tid] || []), ...drawn] };
       logExtra = `${players[nextIdx]?.name} roba 2 y pierde su turno.`;
-      newIdx   = nextActive(nextIdx, direction);
+      // Wild Drawn Together: partner draws same amount
+      const linked2 = state.linkedPlayers;
+      if (linked2?.includes(tid)) {
+        const partnerId2 = linked2[0] === tid ? linked2[1] : linked2[0];
+        const partner2 = players.find(p => p.id === partnerId2 && !p.disconnected);
+        if (partner2) {
+          const { drawn: pd, newDrawPile: npd } = takeCards(drawPile, 2);
+          drawPile = npd;
+          hands = { ...hands, [partnerId2]: [...(hands[partnerId2] || []), ...pd] };
+          logExtra += ` ${partner2.name} también roba 2 (enlazados).`;
+        }
+      }
+      players = players.map(p => ({ ...p, cardCount: (hands[p.id] || []).length }));
+      newIdx  = nextActive(nextIdx, direction);
       break;
     }
 
+    // wild4 is now handled by startWild4Challenge; this case only runs for forced draws
+    // applied from handleWild4Accept/handleWild4Challenge
     case 'wild4': {
       const tid = players[nextIdx].id;
       const { drawn, newDrawPile } = takeCards(drawPile, 4);
@@ -3157,9 +3775,9 @@ async function handleDraw() {
   if (!isMyTurn(state) || state.challengeOpen || state.wildChallenge) return;
   if (drawnCardState !== null) return;
 
-  const myHand          = state.hands?.[localUid] || [];
-  const hasPlayable     = myHand.some(c => c.value === 'wild' || isActualPlayable(c, state));
-  
+  const myHand = state.hands?.[localUid] || [];
+  const hasPlayable = myHand.some(c => isActualPlayable(c, state));
+
   if (hasPlayable) {
     const ok = await showDrawConfirm(
       'white', '✋',
@@ -3169,23 +3787,35 @@ async function handleDraw() {
     if (!ok) return;
   }
 
-  const { drawn, newDrawPile } = takeCards(state.drawPile, 1);
-  const newHand  = [...(state.hands?.[localUid] || []), ...drawn];
-  const newHands = { ...state.hands, [localUid]: newHand };
-  const players  = state.players.map(p =>
-    p.id === localUid ? { ...p, cardCount: newHand.length } : p
-  );
+  let drawPile = state.drawPile;
+  let newHands = { ...state.hands };
+
+  const { drawn, newDrawPile } = takeCards(drawPile, 1);
+  drawPile = newDrawPile;
+  newHands[localUid] = [...(newHands[localUid] || []), ...drawn];
+
+  // Wild Drawn Together: linked partner also draws 1
+  const linked = state.linkedPlayers;
+  if (linked?.includes(localUid) && drawn.length > 0) {
+    const partnerId = linked[0] === localUid ? linked[1] : linked[0];
+    const partner = state.players.find(p => p.id === partnerId && !p.disconnected);
+    if (partner) {
+      const { drawn: pd, newDrawPile: npd } = takeCards(drawPile, 1);
+      drawPile = npd;
+      newHands[partnerId] = [...(newHands[partnerId] || []), ...pd];
+    }
+  }
+
+  const newHand = newHands[localUid];
+  const players = state.players.map(p => ({ ...p, cardCount: (newHands[p.id] || []).length }));
 
   const drawnCard = newHand[newHand.length - 1];
-  const canPlay = !!(drawnCard && (
-    drawnCard.value === 'wild' ||
-    isActualPlayable(drawnCard, state)
-  ));
+  const canPlay = !!(drawnCard && isActualPlayable(drawnCard, state));
   drawnCardState = { cardIdx: newHand.length - 1, canPlay };
 
   await db.collection('rooms').doc(currentRoomId).update({
     hands: newHands,
-    drawPile: newDrawPile,
+    drawPile,
     players,
     lastActivity: firebase.firestore.FieldValue.serverTimestamp()
   });

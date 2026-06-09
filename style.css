@@ -1975,3 +1975,77 @@ em-emoji-picker {
   font-weight: 700;
 }
 .lastfm-connect-btn:hover { background: #f01a08; border-color: #f01a08; }
+
+/* ============================================================
+   POINT TAKEN OVERLAY
+   ============================================================ */
+.pt-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 90;
+  background: rgba(0,0,0,.88);
+  backdrop-filter: blur(8px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.pt-overlay.hidden { display: none; }
+.pt-inner {
+  background: var(--surface);
+  border: 1px solid rgba(255,215,0,.4);
+  border-radius: 16px;
+  padding: 1.5rem 1.25rem;
+  width: min(360px, 94vw);
+  display: flex;
+  flex-direction: column;
+  gap: .85rem;
+  text-align: center;
+}
+.pt-title  { font-size: 1.3rem; font-weight: 800; color: #ffd700; text-shadow: 0 0 16px rgba(255,215,0,.6); }
+.pt-subtitle { font-size: .82rem; color: rgba(255,255,255,.65); }
+.pt-targets { display: flex; flex-direction: column; gap: .5rem; }
+.pt-target-btn { width: 100%; font-size: 1rem; padding: .65rem; }
+.pt-voted  { font-size: .95rem; color: #6bff8a; font-weight: 700; }
+.pt-wait   { font-size: .75rem; color: rgba(255,255,255,.45); }
+
+/* ============================================================
+   WILD PILE UP PANEL
+   ============================================================ */
+.pile-up-panel {
+  position: fixed;
+  bottom: 0; left: 0; right: 0;
+  z-index: 70;
+  background: rgba(0,0,0,.78);
+  backdrop-filter: blur(5px);
+  border-top: 1px solid rgba(255,255,255,.12);
+  padding: .75rem 1rem 1.25rem;
+  pointer-events: auto;
+}
+.pile-up-panel.hidden { display: none; }
+.pu-inner { display: flex; flex-direction: column; gap: .6rem; max-width: 460px; margin: 0 auto; }
+.pu-title { font-size: 1rem; font-weight: 700; text-align: center; }
+.pu-holder { font-size: .8rem; color: rgba(255,255,255,.65); text-align: center; }
+.pu-cards {
+  display: flex; gap: .4rem; overflow-x: auto; justify-content: center;
+  padding: .25rem 0; scrollbar-width: none;
+}
+.pu-cards::-webkit-scrollbar { display: none; }
+
+/* ============================================================
+   WILD DRAWN TOGETHER DIALOG
+   ============================================================ */
+.dt-players { display: flex; flex-direction: column; gap: .45rem; margin: .5rem 0; }
+.dt-player-btn { width: 100%; padding: .55rem; }
+.dt-section-label { font-size: .75rem; color: rgba(255,255,255,.55); text-align: center; margin-top: .25rem; }
+
+/* ============================================================
+   SPEED PLAY HIGHLIGHT
+   ============================================================ */
+.card.speed-playable {
+  animation: speed-pulse .7s ease-in-out infinite;
+  cursor: pointer;
+}
+@keyframes speed-pulse {
+  0%, 100% { box-shadow: 0 0 0 2px rgba(255,215,0,.5),  0 0 8px  rgba(255,215,0,.2); }
+  50%       { box-shadow: 0 0 0 3px rgba(255,215,0,1.0), 0 0 20px rgba(255,215,0,.7); }
+}

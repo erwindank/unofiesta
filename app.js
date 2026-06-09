@@ -2670,7 +2670,7 @@ async function handlePointTakenVote(targetId) {
       const { drawn, newDrawPile } = takeCards(drawPile, count);
       drawPile = newDrawPile;
       hands = { ...hands, [p.id]: [...(hands[p.id] || []), ...drawn] };
-      log = addLog(log, `${p.name} fue apuntado ${count} vez/veces → roba ${count}.`);
+      log = addLog(log, `${p.name} fue apuntado ${count} ${count === 1 ? 'vez' : 'veces'} → roba ${count}.`);
     }
   }
   players = players.map(p => ({ ...p, cardCount: (hands[p.id] || []).length }));
@@ -4428,7 +4428,7 @@ async function botPointTakenVote(state, bots) {
       const { drawn, newDrawPile } = takeCards(drawPile, count);
       drawPile = newDrawPile;
       hands = { ...hands, [p.id]: [...(hands[p.id] || []), ...drawn] };
-      log = addLog(log, `${p.name} fue apuntado ${count} vez/veces → roba ${count}.`);
+      log = addLog(log, `${p.name} fue apuntado ${count} ${count === 1 ? 'vez' : 'veces'} → roba ${count}.`);
     }
   }
   players = players.map(p => ({ ...p, cardCount: (hands[p.id] || []).length }));

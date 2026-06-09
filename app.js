@@ -831,7 +831,7 @@ function onRoomUpdate(state) {
     const currentPlayer = state.players[state.currentPlayerIndex];
     const activePlayers = state.players.filter(p => !p.disconnected);
     if (currentPlayer?.disconnected && activePlayers.length > 0 &&
-        !state.challengeOpen && !state.wildChallenge && !state.sevenSwapPending) {
+        !state.wildChallenge && !state.sevenSwapPending) {
       skipDisconnectedTurn(state);
     }
     showScreen('game');
@@ -972,7 +972,7 @@ function renderGame(state) {
   renderOpponents(state);
   renderStatus(state);
   renderUnoAlert(state);
-  renderChallengeArea(state);
+
   renderHand(state);
   renderLog(state);
   renderUnoCallOverlay(state);
@@ -987,7 +987,7 @@ function renderGame(state) {
   renderChatPanel(state);
   renderSpeechBubbles(state);
 
-  const myTurn = isMyTurn(state) && !state.challengeOpen;
+  const myTurn = isMyTurn(state);
   const canDraw = myTurn && drawnCardState === null;
   document.getElementById('draw-pile-area').style.opacity = canDraw ? '1' : '0.5';
 
@@ -1002,7 +1002,7 @@ function renderGame(state) {
 }
 
 function renderTurnActions(state) {
-  const myTurn = isMyTurn(state) && !state.challengeOpen;
+  const myTurn = isMyTurn(state);
   const passBtn = document.getElementById('pass-btn');
   passBtn.classList.toggle('hidden', !myTurn);
   if (myTurn) passBtn.disabled = drawnCardState === null;
@@ -1038,7 +1038,7 @@ function renderUnoCallOverlay(state) {
   const overlay = document.getElementById('uno-call-overlay');
   const req = state.unoCallRequired;
 
-  if (!req || state.challengeOpen) {
+  if (!req) {
     overlay.classList.add('hidden');
     currentUnoCallRequired = null;
     return;
@@ -1148,8 +1148,7 @@ function renderOpponents(state) {
     const hasVoice = !!peerConns[p.id];
     const miniCards = Array(Math.min(p.cardCount, 12)).fill(0)
       .map(() => `<div class="card-back mini"></div>`).join('');
-    return `<div class="opponent ${isCurrent && !state.challengeOpen ? 'active-player' : ''}
-                                  ${isNext && state.challengeOpen ? 'active-player' : ''}
+    return `<div class="opponent ${isCurrent ? 'active-player' : ''}
                                   ${isDisconnected ? 'player-disconnected' : ''}
                                   ${isSpeaking ? 'voice-speaking' : ''}"
                  data-uid="${esc(p.id)}">
@@ -1165,64 +1164,23 @@ function renderStatus(state) {
   const current = state.players[state.currentPlayerIndex];
 
   const myTurn = isMyTurn(state);
-  el.classList.toggle('my-turn',    myTurn && !state.challengeOpen);
-  el.classList.toggle('other-turn', !myTurn && !state.challengeOpen);
+  el.classList.toggle('my-turn',    myTurn);
+  el.classList.toggle('other-turn', !myTurn);
 
   const dirEl = document.getElementById('direction-indicator');
   if (dirEl) dirEl.textContent = state.direction === 1 ? '↻' : '↺';
 
-  if (state.challengeOpen && state.lastClaimedCard) {
-    const lp = state.players.find(p => p.id === state.lastPlayerId);
-    const c  = state.lastClaimedCard;
-    el.innerHTML = `${esc(lp?.name || '?')} jugó — dice ${cardStatusHTML(c)}`;
-  } else if (myTurn) {
+  if (myTurn) {
     el.textContent = '✨ ¡Tu turno! Elige una carta.';
   } else {
     el.textContent = `Turno de ${current?.name || '?'}`;
   }
 }
 
-function renderChallengeArea(state) {
-  const area = document.getElementById('challenge-area');
-  const txt  = document.getElementById('challenge-text');
-
-  const showChallenge = state.challengeOpen &&
-    state.lastPlayerId !== localUid;
-
-  area.classList.toggle('hidden', !showChallenge);
-
-  if (showChallenge && state.lastClaimedCard) {
-    const c  = state.lastClaimedCard;
-    const lp = state.players.find(p => p.id === state.lastPlayerId);
-    const believes = state.challengeBelieves || [];
-    const alreadyBelieved = believes.includes(localUid);
-
-    // Build "waiting on" list (skip disconnected players)
-    const eligible = state.players.filter(p => p.id !== state.lastPlayerId && !p.disconnected);
-    const waiting  = eligible.filter(p => !believes.includes(p.id));
-    const believed = eligible.filter(p => believes.includes(p.id));
-
-    let believeStatus = '';
-    if (believed.length > 0) {
-      believeStatus = `<div class="believe-votes">✓ ${believed.map(p => esc(p.name)).join(', ')} lo cree${believed.length > 1 ? 'n' : ''}</div>`;
-    }
-    if (waiting.length > 0 && believed.length > 0) {
-      believeStatus += `<div class="believe-waiting">Esperando: ${waiting.map(p => esc(p.name)).join(', ')}</div>`;
-    }
-
-    txt.innerHTML =
-      `${esc(lp?.name || '?')} dice que jugó ${cardStatusHTML(c)}. ¿Lo crees?${believeStatus}`;
-
-    // Show/hide the believe button based on whether current user already voted
-    const believeBtn = document.getElementById('believe-btn');
-    if (believeBtn) believeBtn.classList.toggle('hidden', alreadyBelieved);
-  }
-}
-
 function renderHand(state) {
   const handEl = document.getElementById('player-hand');
   const myHand = state.hands?.[localUid] || [];
-  const myTurn = isMyTurn(state) && !state.challengeOpen;
+  const myTurn = isMyTurn(state);
   const inDrawMode = myTurn && drawnCardState !== null;
 
   // Pile-up phase: the pile holder sees only pile-playable cards highlighted
@@ -1230,7 +1188,7 @@ function renderHand(state) {
   const isPileHolder = pilePhase && state.players[pilePhase.holderIndex]?.id === localUid;
 
   // Speed play: cards clickable out of turn when they match both color+value
-  const canSpeedPlay = !myTurn && !state.challengeOpen && !pilePhase &&
+  const canSpeedPlay = !myTurn && !pilePhase &&
     !state.pointTakenPhase && !state.wild4Challenge;
 
   handEl.innerHTML = myHand.map((card, i) => {
@@ -2147,7 +2105,7 @@ function checkNotifications(state) {
   prevNotifState = {
     status: state.status,
     currentPlayerIndex: state.currentPlayerIndex,
-    challengeOpen: !!state.challengeOpen,
+
     unoCallRequiredFor: state.unoCallRequired?.playerId || null,
   };
   if (!prev) return;
@@ -2170,13 +2128,7 @@ function checkNotifications(state) {
     notify('¡Es tu turno!', 'Elige una carta para jugar.');
     return;
   }
-  if (!prev.challengeOpen && state.challengeOpen && state.lastPlayerId !== localUid) {
-    const lp = state.players.find(p => p.id === state.lastPlayerId);
-    const c  = state.lastClaimedCard;
-    const claimed = c ? `${COLOR_NAME[c.color] || ''} ${VALUE_LABEL[c.value] || ''}`.trim() : '?';
-    notify(`${lp?.name || '?'} jugó una carta`, `Dice que jugó ${claimed}. ¿Lo crees?`);
-    return;
-  }
+
   if (!prev.unoCallRequiredFor && state.unoCallRequired?.playerId === localUid) {
     notify('¡UNO!', '¡Solo te queda 1 carta! Grita UNO antes de que alguien te atrape.');
   }
@@ -2194,7 +2146,7 @@ async function selectCard(index) {
   if (!card) return;
 
   // Speed Play: number card matching both color AND value when not your turn
-  if (!isMyTurn(roomState) && !roomState.challengeOpen && !roomState.wildPileUpPhase &&
+  if (!isMyTurn(roomState) && !roomState.wildPileUpPhase &&
       !roomState.pointTakenPhase && !roomState.wild4Challenge) {
     if (NUMBERS.includes(card.value) &&
         card.color === roomState.topColor && card.value === roomState.topValue) {
@@ -2216,7 +2168,6 @@ async function selectCard(index) {
   }
 
   if (!isMyTurn(roomState)) return;
-  if (roomState.challengeOpen) return;
 
   if (drawnCardState !== null && index === drawnCardState.cardIdx && !drawnCardState.canPlay) return;
 
@@ -2325,24 +2276,9 @@ async function confirmPlay() {
   const actualCard = myHand[selectedCardIdx];
   if (!actualCard) return;
 
-  if (actualCard.value === 'wild') {
-    document.getElementById('claim-dialog').classList.add('hidden');
-    await startWildChallenge(actualCard, claimColor, selectedCardIdx);
-    selectedCardIdx = null;
-    selectedActualCard = null;
-    return;
-  }
-
-  if (actualCard.value === 'wild4') {
+  if (actualCard.value === 'wild4' || actualCard.value === 'wildc4Plus') {
     document.getElementById('claim-dialog').classList.add('hidden');
     await startWild4Challenge(actualCard, claimColor, selectedCardIdx);
-    selectedCardIdx = null;
-    selectedActualCard = null;
-    return;
-  }
-  if (actualCard.value === 'wildc4Plus') {
-    document.getElementById('claim-dialog').classList.add('hidden');
-    await startWildChallenge(actualCard, claimColor, selectedCardIdx);
     selectedCardIdx = null;
     selectedActualCard = null;
     return;
@@ -2710,7 +2646,7 @@ async function playNormalCardWithSwap(actualCard, cardIndex, targetId) {
   const won = handAfterPlay.length === 0;
 
   let log = addLog(state.log,
-    `${localName} jugó ${COLOR_NAME[actualCard.color]} ${VALUE_LABEL[actualCard.value]} boca arriba.`
+    `${localName} jugó ${COLOR_NAME[actualCard.color]} ${VALUE_LABEL[actualCard.value]}.`
   );
 
   const newHands = { ...state.hands, [localUid]: handAfterPlay };
@@ -3345,7 +3281,7 @@ async function playNormalCard(actualCard, cardIndex, chosenColor = null) {
   let topColor = actualCard.color;
   let topValue = actualCard.value;
   let log = addLog(state.log,
-    `${localName} jugó ${COLOR_NAME[actualCard.color]} ${VALUE_LABEL[actualCard.value]} boca arriba.`
+    `${localName} jugó ${COLOR_NAME[actualCard.color]} ${VALUE_LABEL[actualCard.value]}.`
   );
 
   const newHands = { ...state.hands, [localUid]: newHand };
@@ -3394,243 +3330,6 @@ async function playNormalCard(actualCard, cardIndex, chosenColor = null) {
 function isClaimPlayable(claimed, state) {
   if (WILDS.includes(claimed.value) || PARTY_CARDS.includes(claimed.value)) return true;
   return claimed.color === state.topColor || claimed.value === state.topValue;
-}
-
-// ============================================================
-// PLAY CARD
-// ============================================================
-
-async function doPlayCard(actualCard, claimedCard, cardIndex) {
-  drawnCardState = null;
-  const state = roomState;
-  const myHand  = [...(state.hands?.[localUid] || [])];
-  const newHand = myHand.filter((_, i) => i !== cardIndex);
-  const won     = newHand.length === 0;
-
-  const newHands = { ...state.hands, [localUid]: newHand };
-  const players  = state.players.map(p =>
-    p.id === localUid ? { ...p, cardCount: newHand.length } : p
-  );
-
-  const log = addLog(state.log,
-    `${localName} jugó una carta boca abajo y dijo ${cardLogName(claimedCard)}.`
-  );
-
-  const update = {
-    players,
-    hands: newHands,
-    lastPlayerId: localUid,
-    lastActualCard: actualCard,
-    lastClaimedCard: claimedCard,
-    prevTopColor: state.topColor,
-    prevTopValue: state.topValue,
-    challengeOpen: true,
-    challengeBelieves: [],
-    unoCallRequired: newHand.length === 1
-      ? { playerId: localUid, playerName: localName }
-      : firebase.firestore.FieldValue.delete(),
-    log,
-    lastActivity: firebase.firestore.FieldValue.serverTimestamp()
-  };
-
-  await db.collection('rooms').doc(currentRoomId).update(update);
-}
-
-// ============================================================
-// CHALLENGE
-// ============================================================
-
-async function handleChallenge() {
-  const state = roomState;
-  if (!state?.challengeOpen || !state.lastActualCard || !state.lastClaimedCard) return;
-
-  const actual  = state.lastActualCard;
-  const claimed = state.lastClaimedCard;
-  const player  = state.players.find(p => p.id === state.lastPlayerId);
-  // For wild cards (black), color is a free choice — only compare value
-  const isLie   = actual.value !== claimed.value ||
-    (actual.color !== 'black' && actual.color !== claimed.color);
-
-  let { hands, players, drawPile } = state;
-  let log = state.log;
-
-  if (isLie) {
-    // El mentiroso recupera la carta jugada y roba 1 carta del mazo
-    const { drawn, newDrawPile } = takeCards(drawPile, 1);
-    hands = { ...hands, [state.lastPlayerId]: [...(hands[state.lastPlayerId] || []), actual, ...drawn] };
-    players = players.map(p =>
-      p.id === state.lastPlayerId ? { ...p, cardCount: hands[p.id].length } : p
-    );
-    log = addLog(log,
-      `🚨 ¡${localName} desafió a ${player?.name}! ${player?.name} perdió y recuperó la carta, luego robó ${drawn.length} más.`
-    );
-
-    await db.collection('rooms').doc(currentRoomId).update({
-      hands,
-      players,
-      drawPile: newDrawPile,
-      topColor: state.prevTopColor,
-      topValue: state.prevTopValue,
-      challengeOpen: false,
-      challengeBelieves: firebase.firestore.FieldValue.delete(),
-      lastActualCard: null,
-      lastClaimedCard: null,
-      currentPlayerIndex: nextPlayerIndex(state),
-      log,
-      lastActivity: firebase.firestore.FieldValue.serverTimestamp()
-    });
-
-  } else {
-    // Honesto: el desafiante roba 1 carta y se aplica el efecto
-    log = addLog(log,
-      `✓ ${localName} desafió a ${player?.name}, pero ${player?.name} jugó honestamente (${actual?.value === 'wild' ? 'Comodín' : actual?.value === 'wild4' ? 'Comodín +4' : cardLogName(actual)}). ${localName} roba 1.`
-    );
-
-    const lastPlayerWon = (hands?.[state.lastPlayerId] || []).length === 0;
-    if (lastPlayerWon) {
-      // Last card was the truth — give accuser the penalty draw then end the game
-      const { drawn, newDrawPile } = takeCards(drawPile, 1);
-      const newHands = { ...hands, [localUid]: [...(hands[localUid] || []), ...drawn] };
-      const newPlayers = players.map(p =>
-        p.id === localUid ? { ...p, cardCount: newHands[p.id].length } : p
-      );
-      log = addLog(log, `${localName} roba ${drawn.length}.`);
-      await db.collection('rooms').doc(currentRoomId).update({
-        hands: newHands,
-        players: newPlayers,
-        drawPile: newDrawPile,
-        status: 'ended',
-        winner: state.lastPlayerId,
-        winnerName: player?.name,
-        topColor: claimed.color,
-        topValue: claimed.value,
-        challengeOpen: false,
-        challengeBelieves: firebase.firestore.FieldValue.delete(),
-        lastActualCard: null,
-        lastClaimedCard: null,
-        log,
-        lastActivity: firebase.firestore.FieldValue.serverTimestamp()
-      });
-
-    } else if (claimed.value === '0') {
-      // Rotate hands first, then add drawn card to localUid's new (received) hand
-      const { drawn, newDrawPile } = takeCards(drawPile, 1);
-      const advanced = applyEffectsAndAdvance({ ...state, hands, players, drawPile: newDrawPile });
-      const postHands = { ...advanced.changes.hands, [localUid]: [...(advanced.changes.hands[localUid] || []), ...drawn] };
-      const postPlayers = advanced.changes.players.map(p =>
-        p.id === localUid ? { ...p, cardCount: postHands[p.id].length } : p
-      );
-      log = addLog(log, advanced.logExtra);
-      log = addLog(log, `${localName} robó ${drawn.length} tras el intercambio.`);
-      await db.collection('rooms').doc(currentRoomId).update({
-        ...advanced.changes,
-        hands: postHands,
-        players: postPlayers,
-        challengeOpen: false,
-        challengeBelieves: firebase.firestore.FieldValue.delete(),
-        lastActualCard: null,
-        lastClaimedCard: null,
-        log,
-        lastActivity: firebase.firestore.FieldValue.serverTimestamp()
-      });
-
-    } else if (claimed.value === '7') {
-      // Set sevenSwapPending without drawing; draw after swap resolves in executeSevenSwap
-      const advanced = applyEffectsAndAdvance({ ...state, hands, players, drawPile });
-      log = addLog(log, advanced.logExtra);
-      log = addLog(log, `${localName} robará 1 tras el intercambio de manos.`);
-      await db.collection('rooms').doc(currentRoomId).update({
-        ...advanced.changes,
-        pendingPenaltyDraw: { playerId: localUid, count: 1 },
-        challengeOpen: false,
-        challengeBelieves: firebase.firestore.FieldValue.delete(),
-        lastActualCard: null,
-        lastClaimedCard: null,
-        log,
-        lastActivity: firebase.firestore.FieldValue.serverTimestamp()
-      });
-
-    } else {
-      // Default: draw first, then apply effects
-      const { drawn, newDrawPile } = takeCards(drawPile, 1);
-      hands = { ...hands, [localUid]: [...(hands[localUid] || []), ...drawn] };
-      players = players.map(p =>
-        p.id === localUid ? { ...p, cardCount: hands[p.id].length } : p
-      );
-      log = addLog(log, `${localName} roba ${drawn.length}.`);
-      const advanced = applyEffectsAndAdvance({ ...state, hands, players, drawPile: newDrawPile });
-      log = addLog(log, advanced.logExtra);
-      await db.collection('rooms').doc(currentRoomId).update({
-        ...advanced.changes,
-        challengeOpen: false,
-        challengeBelieves: firebase.firestore.FieldValue.delete(),
-        lastActualCard: null,
-        lastClaimedCard: null,
-        log,
-        lastActivity: firebase.firestore.FieldValue.serverTimestamp()
-      });
-    }
-  }
-}
-
-// ============================================================
-// BELIEVE
-// ============================================================
-
-async function handleBelieve() {
-  const state = roomState;
-  if (!state?.challengeOpen) return;
-
-  const believes = state.challengeBelieves || [];
-  if (believes.includes(localUid)) return; // already voted
-
-  const newBelieves = [...believes, localUid];
-  const lp = state.players.find(p => p.id === state.lastPlayerId);
-
-  // Eligible voters = connected players except the one who played the card
-  const eligible = state.players.filter(p => p.id !== state.lastPlayerId && !p.disconnected);
-  const allVoted = eligible.every(p => newBelieves.includes(p.id));
-
-  let log = addLog(state.log, `${localName} confía en ${lp?.name}.`);
-
-  if (allVoted) {
-    const lastPlayerWon = (state.hands?.[state.lastPlayerId] || []).length === 0;
-    if (lastPlayerWon) {
-      await db.collection('rooms').doc(currentRoomId).update({
-        status: 'ended',
-        winner: state.lastPlayerId,
-        winnerName: lp?.name,
-        topColor: state.lastClaimedCard.color,
-        topValue: state.lastClaimedCard.value,
-        challengeOpen: false,
-        challengeBelieves: firebase.firestore.FieldValue.delete(),
-        lastActualCard: null,
-        lastClaimedCard: null,
-        log,
-        lastActivity: firebase.firestore.FieldValue.serverTimestamp()
-      });
-    } else {
-      // Everyone has voted "Lo creo" — resolve the challenge
-      const advanced = applyEffectsAndAdvance(state);
-      log = addLog(log, advanced.logExtra);
-      await db.collection('rooms').doc(currentRoomId).update({
-        ...advanced.changes,
-        challengeOpen: false,
-        challengeBelieves: firebase.firestore.FieldValue.delete(),
-        lastActualCard: null,
-        lastClaimedCard: null,
-        log,
-        lastActivity: firebase.firestore.FieldValue.serverTimestamp()
-      });
-    }
-  } else {
-    // Still waiting for other players
-    await db.collection('rooms').doc(currentRoomId).update({
-      challengeBelieves: newBelieves,
-      log,
-      lastActivity: firebase.firestore.FieldValue.serverTimestamp()
-    });
-  }
 }
 
 // ============================================================
@@ -3793,7 +3492,7 @@ function showDrawConfirm(accent, icon, title, message, okLabel, cancelLabel, thi
 
 async function handleDraw() {
   const state = roomState;
-  if (!isMyTurn(state) || state.challengeOpen || state.wildChallenge) return;
+  if (!isMyTurn(state) || state.wildChallenge) return;
   if (drawnCardState !== null) return;
 
   const myHand = state.hands?.[localUid] || [];
@@ -3844,7 +3543,7 @@ async function handleDraw() {
 
 async function handlePassTurn() {
   const state = roomState;
-  if (!isMyTurn(state) || state.challengeOpen || state.wildChallenge || drawnCardState === null) return;
+  if (!isMyTurn(state) || state.wildChallenge || drawnCardState === null) return;
 
   const hadDrawn = drawnCardState !== null;
   drawnCardState = null;
@@ -4637,16 +4336,7 @@ async function doBotTick(state) {
 }
 
 async function runBotTick(state) {
-  // 1. Challenge open (face-down claim system): bots auto-believe
-  if (state.challengeOpen && state.lastPlayerId) {
-    const bots = state.players.filter(p =>
-      isBot(p.id) && p.id !== state.lastPlayerId && !p.disconnected &&
-      !(state.challengeBelieves || []).includes(p.id)
-    );
-    if (bots.length > 0) { await botBelieveAll(state, bots); return; }
-  }
-
-  // 2. Wild challenge phase
+  // 1. Wild challenge phase
   if (state.wildChallenge) { await botHandleWildChallenge(state); return; }
 
   // 3. Point taken phase: bots vote
@@ -4682,48 +4372,6 @@ async function runBotTick(state) {
   }
 }
 
-// ----- Bot: auto-believe in challenge -----
-
-async function botBelieveAll(state, bots) {
-  let believes = [...(state.challengeBelieves || [])];
-  let log = state.log;
-  const lp = state.players.find(p => p.id === state.lastPlayerId);
-
-  for (const bot of bots) {
-    believes.push(bot.id);
-    log = addLog(log, `${bot.name} confía en ${lp?.name || '?'}.`);
-  }
-
-  const eligible = state.players.filter(p => p.id !== state.lastPlayerId && !p.disconnected);
-  const allVoted = eligible.every(p => believes.includes(p.id));
-
-  if (allVoted) {
-    const lastPlayerWon = (state.hands?.[state.lastPlayerId] || []).length === 0;
-    if (lastPlayerWon) {
-      await db.collection('rooms').doc(currentRoomId).update({
-        status: 'ended', winner: state.lastPlayerId, winnerName: lp?.name,
-        topColor: state.lastClaimedCard.color, topValue: state.lastClaimedCard.value,
-        challengeOpen: false, challengeBelieves: firebase.firestore.FieldValue.delete(),
-        lastActualCard: null, lastClaimedCard: null, log,
-        lastActivity: firebase.firestore.FieldValue.serverTimestamp()
-      });
-    } else {
-      const advanced = applyEffectsAndAdvance(state);
-      log = addLog(log, advanced.logExtra);
-      await db.collection('rooms').doc(currentRoomId).update({
-        ...advanced.changes, challengeOpen: false,
-        challengeBelieves: firebase.firestore.FieldValue.delete(),
-        lastActualCard: null, lastClaimedCard: null, log,
-        lastActivity: firebase.firestore.FieldValue.serverTimestamp()
-      });
-    }
-  } else {
-    await db.collection('rooms').doc(currentRoomId).update({
-      challengeBelieves: believes, log,
-      lastActivity: firebase.firestore.FieldValue.serverTimestamp()
-    });
-  }
-}
 
 // ----- Bot: wild challenge multi-phase handler -----
 
@@ -5096,37 +4744,31 @@ async function botPlayCard(state, botId, botName, card, cardIdx) {
   const won = newHand.length === 0;
   const n = state.players.length;
 
-  // Wild → start wild challenge (all others submit a card)
-  if (card.value === 'wild' || card.value === 'wildc4Plus') {
+  // Wild → change color and advance turn
+  if (card.value === 'wild') {
     const color = botPickColor(myHand);
     const newHands = { ...state.hands, [botId]: newHand };
     const players = state.players.map(p =>
       p.id === botId ? { ...p, cardCount: newHand.length } : p
     );
-    const others = state.players.filter(p => p.id !== botId).map(p => p.id);
-    const log = addLog(state.log,
-      `${botName} jugó Comodín y elige ${COLOR_NAME[color]}. ¡Todos ponen una carta boca abajo!`
-    );
-    await db.collection('rooms').doc(currentRoomId).update({
+    const log = addLog(state.log, `${botName} jugó Comodín y eligió ${COLOR_NAME[color]}.`);
+    const update = {
       players, hands: newHands,
-      topColor: 'black', topValue: 'wild',
+      topColor: color, topValue: 'wild',
+      currentPlayerIndex: nextPlayerIndex(state),
       challengeOpen: false, lastActualCard: null, lastClaimedCard: null,
-      wildChallenge: {
-        phase: 'collecting',
-        chooserId: botId, chooserName: botName, chosenColor: color,
-        playersNeeded: others,
-        submittedCards: {}, flippedCards: {},
-        accusePool: [...others], accusedWrong: [],
-        foundPlayerId: null, discardQueue: [],
-        nextPlayerIndex: nextPlayerIndex(state)
-      },
       log, lastActivity: firebase.firestore.FieldValue.serverTimestamp()
-    });
+    };
+    update.unoCallRequired = (!won && newHand.length === 1)
+      ? { playerId: botId, playerName: botName }
+      : firebase.firestore.FieldValue.delete();
+    if (won) { update.status = 'ended'; update.winner = botId; update.winnerName = botName; }
+    await db.collection('rooms').doc(currentRoomId).update(update);
     return;
   }
 
-  // Wild4 → start wild4 challenge for next player
-  if (card.value === 'wild4') {
+  // Wild4 / wildc4Plus → start wild4 challenge for next player
+  if (card.value === 'wild4' || card.value === 'wildc4Plus') {
     const color = botPickColor(myHand);
     const newHands = { ...state.hands, [botId]: newHand };
     const players = state.players.map(p =>
@@ -5244,7 +4886,7 @@ async function botPlayCard(state, botId, botName, card, cardIdx) {
     );
     const nextIdx = ((state.currentPlayerIndex + state.direction) % n + n) % n;
     const log = addLog(state.log,
-      `${botName} jugó ${COLOR_NAME[card.color]} 7 boca arriba.`
+      `${botName} jugó ${COLOR_NAME[card.color]} 7.`
     );
     const update = {
       players, hands: newHands,
@@ -5266,7 +4908,7 @@ async function botPlayCard(state, botId, botName, card, cardIdx) {
     p.id === botId ? { ...p, cardCount: newHand.length } : p
   );
   let log = addLog(state.log,
-    `${botName} jugó ${COLOR_NAME[card.color]} ${VALUE_LABEL[card.value]} boca arriba.`
+    `${botName} jugó ${COLOR_NAME[card.color]} ${VALUE_LABEL[card.value]}.`
   );
 
   if (card.value === '0') {

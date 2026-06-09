@@ -1221,6 +1221,9 @@ function renderHand(state) {
       isPlayable = true;
       onclick = `selectCard(${i})`;
       extraClass = ' speed-playable';
+    } else if (isPileHolder) {
+      isPlayable = false;
+      onclick = '';
     } else {
       isPlayable = myTurn;
       onclick = myTurn ? `selectCard(${i})` : '';
@@ -1241,7 +1244,7 @@ function renderHand(state) {
   }).join('');
 
   if (isPileHolder) {
-    const hasMatch = myHand.some(c => c.color === 'black' || c.color === pilePhase.pileColor);
+    const hasMatch = myHand.some(c => c.color === pilePhase.pileColor);
     document.getElementById('hand-label').textContent = hasMatch
       ? `Mini-pila (${COLOR_NAME[pilePhase.pileColor]}) — juega una carta que coincida o toca "Tomar pila"`
       : `Mini-pila (${COLOR_NAME[pilePhase.pileColor]}) — no tienes cartas jugables`;
@@ -2773,37 +2776,17 @@ async function handlePlayOnPile(cardIndex) {
 
   const n = players.length;
   const nextIdx = ((phase.holderIndex + state.direction) % n + n) % n;
-  const nextHolder = players[nextIdx];
-  const nextHand = state.hands?.[nextHolder?.id] || [];
-  const nextCanPlay = nextHand.some(c => c.color === newPileColor);
 
-  let log = addLog(state.log,
+  const log = addLog(state.log,
     `${localName} jugó ${COLOR_NAME[card.color]} ${VALUE_LABEL[card.value]} en la mini-pila.`
   );
 
-  if (!nextCanPlay && nextHolder && !nextHolder.disconnected) {
-    // Give entire pile to next holder — they can't play
-    newHands = { ...newHands, [nextHolder.id]: [...nextHand, ...newPile] };
-    players = players.map(p => ({ ...p, cardCount: (newHands[p.id] || []).length }));
-    const afterNextIdx = ((nextIdx + state.direction) % n + n) % n;
-    log = addLog(log,
-      `${nextHolder.name} no puede jugar → toma la mini-pila (${newPile.length} cartas). El color que continúa es ${COLOR_NAME[newPileColor]}.`
-    );
-    await db.collection('rooms').doc(currentRoomId).update({
-      hands: newHands, players,
-      topColor: newPileColor, topValue: 'wildPileUp',
-      wildPileUpPhase: firebase.firestore.FieldValue.delete(),
-      currentPlayerIndex: afterNextIdx,
-      log, lastActivity: firebase.firestore.FieldValue.serverTimestamp()
-    });
-  } else {
-    await db.collection('rooms').doc(currentRoomId).update({
-      hands: newHands, players,
-      topColor: newPileColor,
-      wildPileUpPhase: { ...phase, pile: newPile, pileColor: newPileColor, holderIndex: nextIdx },
-      log, lastActivity: firebase.firestore.FieldValue.serverTimestamp()
-    });
-  }
+  await db.collection('rooms').doc(currentRoomId).update({
+    hands: newHands, players,
+    topColor: newPileColor,
+    wildPileUpPhase: { ...phase, pile: newPile, pileColor: newPileColor, holderIndex: nextIdx },
+    log, lastActivity: firebase.firestore.FieldValue.serverTimestamp()
+  });
 }
 
 async function handleTakePile() {
@@ -2848,8 +2831,10 @@ function renderWildPileUpPanel(state) {
     `⬆ Mini-Pila — color <strong style="color:${LOG_COLOR_HEX[phase.pileColor]}">${COLOR_NAME[phase.pileColor]}</strong>` +
     ` (${phase.pile.length} carta${phase.pile.length !== 1 ? 's' : ''})`;
   document.getElementById('pu-holder').textContent =
-    isHolder ? '¡Es tu turno! Juega una carta del color de la pila o toma la pila.'
-             : `Esperando que ${esc(holder?.name || '?')} juegue…`;
+    isHolder
+      ? (hasMatch ? '¡Es tu turno! Juega una carta del color de la pila.'
+                  : 'No tienes cartas del color requerido. Debes tomar la pila.')
+      : `Esperando que ${esc(holder?.name || '?')} juegue…`;
   document.getElementById('pu-cards').innerHTML =
     phase.pile.map(c => buildCardHTML(c)).join('');
   const takePileBtn = document.getElementById('pu-take-btn');
@@ -4528,36 +4513,17 @@ async function botWildPileUpAct(state, botId, botName) {
   const newPileColor = phase.pileColor;
   const n = players.length;
   const nextIdx = ((phase.holderIndex + state.direction) % n + n) % n;
-  const nextHolder = players[nextIdx];
-  const nextHand = state.hands?.[nextHolder?.id] || [];
-  const nextCanPlay = nextHand.some(c => c.color === newPileColor);
 
-  let log = addLog(state.log,
+  const log = addLog(state.log,
     `${botName} jugó ${COLOR_NAME[card.color]} ${VALUE_LABEL[card.value]} en la mini-pila.`
   );
 
-  if (!nextCanPlay && nextHolder && !nextHolder.disconnected) {
-    newHands = { ...newHands, [nextHolder.id]: [...nextHand, ...newPile] };
-    players = players.map(p => ({ ...p, cardCount: (newHands[p.id] || []).length }));
-    const afterNextIdx = ((nextIdx + state.direction) % n + n) % n;
-    log = addLog(log,
-      `${nextHolder.name} no puede jugar → toma la mini-pila (${newPile.length} cartas). El color que continúa es ${COLOR_NAME[newPileColor]}.`
-    );
-    await db.collection('rooms').doc(currentRoomId).update({
-      hands: newHands, players,
-      topColor: newPileColor, topValue: 'wildPileUp',
-      wildPileUpPhase: firebase.firestore.FieldValue.delete(),
-      currentPlayerIndex: afterNextIdx,
-      log, lastActivity: firebase.firestore.FieldValue.serverTimestamp()
-    });
-  } else {
-    await db.collection('rooms').doc(currentRoomId).update({
-      hands: newHands, players,
-      topColor: newPileColor,
-      wildPileUpPhase: { ...phase, pile: newPile, pileColor: newPileColor, holderIndex: nextIdx },
-      log, lastActivity: firebase.firestore.FieldValue.serverTimestamp()
-    });
-  }
+  await db.collection('rooms').doc(currentRoomId).update({
+    hands: newHands, players,
+    topColor: newPileColor,
+    wildPileUpPhase: { ...phase, pile: newPile, pileColor: newPileColor, holderIndex: nextIdx },
+    log, lastActivity: firebase.firestore.FieldValue.serverTimestamp()
+  });
 }
 
 // ----- Bot: normal turn -----

@@ -822,6 +822,7 @@ input[type=text]:focus { border-color: var(--blue); }
 .log-entry.log-lie span,
 .log-entry.log-truth span,
 .log-entry.log-uno span { text-shadow: none; }
+.log-color-blue { text-shadow: -1px -1px 0 rgba(255,255,255,.6), 1px -1px 0 rgba(255,255,255,.6), -1px 1px 0 rgba(255,255,255,.6), 1px 1px 0 rgba(255,255,255,.6); }
 
 /* Hand area */
 .hand-area {

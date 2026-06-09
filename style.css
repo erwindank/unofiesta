@@ -2086,6 +2086,7 @@ em-emoji-picker {
 .pu-inner { display: flex; flex-direction: column; gap: .6rem; }
 .pu-title { font-size: 1rem; font-weight: 700; text-align: center; }
 .pu-holder { font-size: .8rem; color: rgba(255,255,255,.65); text-align: center; }
+.pu-holder.must-take { font-size: .9rem; color: #ffaa66; font-weight: 600; }
 .pu-cards {
   display: flex; gap: .4rem; overflow-x: auto; justify-content: center;
   padding: .25rem 0; scrollbar-width: none;

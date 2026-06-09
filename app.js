@@ -2932,11 +2932,13 @@ function renderWildPileUpPanel(state) {
   document.getElementById('pu-title').innerHTML =
     `⬆ Mini-Pila — color <strong style="color:${LOG_COLOR_HEX[phase.pileColor]}">${COLOR_NAME[phase.pileColor]}</strong>` +
     ` (${phase.pile.length} carta${phase.pile.length !== 1 ? 's' : ''})`;
-  document.getElementById('pu-holder').textContent =
-    isHolder
-      ? (hasMatch ? '¡Es tu turno! Juega una carta del color de la pila.'
-                  : 'No tienes cartas del color requerido. Debes tomar la pila.')
-      : `Esperando que ${esc(holder?.name || '?')} juegue…`;
+  const holderEl = document.getElementById('pu-holder');
+  holderEl.className = 'pu-holder' + (isHolder && !hasMatch ? ' must-take' : '');
+  holderEl.innerHTML = isHolder
+    ? (hasMatch
+        ? '¡Es tu turno! Juega una carta del color de la pila.'
+        : `No tienes cartas de color <strong style="color:${LOG_COLOR_HEX[phase.pileColor]}">${COLOR_NAME[phase.pileColor]}</strong>. Debes tomar la mini-pila.`)
+    : `Esperando que <strong>${esc(holder?.name || '?')}</strong> juegue…`;
   document.getElementById('pu-cards').innerHTML =
     phase.pile.map(c => buildCardHTML(c)).join('');
   const takePileBtn = document.getElementById('pu-take-btn');
@@ -4230,12 +4232,13 @@ async function runBotTick(state) {
     if (bots.length > 0) { await botPointTakenVote(state, bots); return; }
   }
 
-  // 6. Wild pile up — bot is holder
+  // 6. Wild pile up — only the holder acts; all other bot turns are blocked
   if (state.wildPileUpPhase) {
     const holder = state.players[state.wildPileUpPhase.holderIndex];
     if (holder && isBot(holder.id)) {
-      await botWildPileUpAct(state, holder.id, holder.name); return;
+      await botWildPileUpAct(state, holder.id, holder.name);
     }
+    return;
   }
 
   // 7. Normal turn — current player is a bot

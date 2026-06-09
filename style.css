@@ -200,6 +200,9 @@ input[type=text]:focus { border-color: var(--blue); }
   font-size: .95rem;
 }
 .player-item.me { border-left: 3px solid #1a4ebb; }
+.player-item.is-bot { border-left: 3px solid #6366f1; opacity: .85; display: flex; align-items: center; }
+.btn-remove-bot { background: none; border: none; color: #f87171; cursor: pointer; font-size: .85rem; margin-left: auto; padding: 0 .25rem; line-height: 1; }
+.btn-remove-bot:hover { color: #ef4444; }
 
 .lobby-actions { display: flex; flex-direction: column; gap: .5rem; align-items: center; }
 .muted { color: var(--muted); font-size: .875rem; }

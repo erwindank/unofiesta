@@ -833,6 +833,23 @@ function onRoomUpdate(state) {
       }).catch(() => {});
       return;
     }
+    // End game when no connected players remain
+    if (connectedPlayers.length === 0) {
+      db.collection('rooms').doc(currentRoomId).delete().catch(() => {});
+      return;
+    }
+    // End game when only one connected player remains (last player standing due to disconnections)
+    if (connectedPlayers.length === 1) {
+      const winner = connectedPlayers[0];
+      db.collection('rooms').doc(currentRoomId).update({
+        status: 'ended',
+        winner: winner.id,
+        winnerName: winner.name,
+        winnerReason: 'lastPlayer',
+        log: addLog(state.log, `¡${winner.name} gana por ser el último jugador!`)
+      }).catch(() => {});
+      return;
+    }
     // Auto-skip disconnected players' turns (any client can trigger; same result from all)
     const currentPlayer = state.players[state.currentPlayerIndex];
     const activePlayers = state.players.filter(p => !p.disconnected);

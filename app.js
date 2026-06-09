@@ -1171,7 +1171,7 @@ function renderStatus(state) {
   if (dirEl) dirEl.textContent = state.direction === 1 ? '↻' : '↺';
 
   if (myTurn) {
-    el.textContent = '✨ ¡Tu turno! Elige una carta.';
+    el.textContent = '🎊 ¡Tu turno! Elige una carta.';
   } else {
     el.textContent = `Turno de ${current?.name || '?'}`;
   }
@@ -2117,7 +2117,7 @@ function checkNotifications(state) {
   }
   if (prev.status !== 'ended' && state.status === 'ended') {
     const won = state.winner === localUid;
-    notify(won ? '🏆 ¡Ganaste!' : '🃏 Partida terminada',
+    notify(won ? '🥳 ¡Ganaste!' : '🃏 Partida terminada',
            won ? '¡Felicidades!' : `Ganó ${state.winnerName || '?'}`);
     return;
   }
@@ -2572,7 +2572,7 @@ function renderWildChallenge(state) {
 
   else if (wc.phase === 'accusing') {
     if (wc.chooserId === localUid) {
-      title.innerHTML = `🎯 ¿Quién tiene ${colorSpan(wc.chosenColor)}?`;
+      title.innerHTML = `🫵 ¿Quién tiene ${colorSpan(wc.chosenColor)}?`;
       const buttons = wc.accusePool.map(id => {
         const p = state.players.find(pl => pl.id === id);
         return `<button class="btn btn-danger" style="width:100%" onclick="accuseWildPlayer('${id}')">
@@ -2580,7 +2580,7 @@ function renderWildChallenge(state) {
       }).join('');
       body.innerHTML = `${table}<div class="wc-accuse-list">${buttons}</div>`;
     } else {
-      title.innerHTML = `🎯 ${esc(wc.chooserName)} está acusando…`;
+      title.innerHTML = `🫵 ${esc(wc.chooserName)} está acusando…`;
       body.innerHTML = table;
     }
   }

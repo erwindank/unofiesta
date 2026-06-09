@@ -1002,6 +1002,14 @@ function renderGame(state) {
   const canDraw = myTurn && drawnCardState === null;
   document.getElementById('draw-pile-area').style.opacity = canDraw ? '1' : '0.5';
 
+  const linked = state.linkedPlayers || [];
+  const handLabel = document.getElementById('hand-label');
+  if (linked.includes(localUid)) {
+    handLabel.innerHTML = 'Tu mano <span class="linked-badge">🔗 ENLAZADO</span>';
+  } else {
+    handLabel.textContent = 'Tu mano';
+  }
+
   const myHand           = state.hands?.[localUid] || [];
   const hasPlayable      = myHand.some(c => isActualPlayable(c, state));
   
@@ -1149,6 +1157,7 @@ function renderTopCard(state) {
 function renderOpponents(state) {
   const row = document.getElementById('opponents-row');
   const others = state.players.filter(p => p.id !== localUid);
+  const linked = state.linkedPlayers || [];
 
   row.innerHTML = others.map(p => {
     const isCurrent = state.players[state.currentPlayerIndex]?.id === p.id;
@@ -1157,12 +1166,15 @@ function renderOpponents(state) {
     const isDisconnected = !!p.disconnected;
     const isSpeaking = !!speakingStates[p.id];
     const hasVoice = !!peerConns[p.id];
+    const isLinked = linked.includes(p.id);
     const miniCards = Array(Math.min(p.cardCount, 12)).fill(0)
       .map(() => `<div class="card-back mini"></div>`).join('');
     return `<div class="opponent ${isCurrent ? 'active-player' : ''}
                                   ${isDisconnected ? 'player-disconnected' : ''}
-                                  ${isSpeaking ? 'voice-speaking' : ''}"
+                                  ${isSpeaking ? 'voice-speaking' : ''}
+                                  ${isLinked ? 'is-linked' : ''}"
                  data-uid="${esc(p.id)}">
+      ${isLinked ? '<div class="linked-badge">🔗 ENLAZADO</div>' : ''}
       <div class="opponent-name">${esc(p.name)}${isDisconnected ? ' <span class="dc-badge">desconectado</span>' : ''}${hasVoice ? ' <span class="voice-mic-icon">🎤</span>' : ''}</div>
       <div class="opponent-cards">${miniCards}</div>
       <div class="opponent-count">${p.cardCount}🃏</div>

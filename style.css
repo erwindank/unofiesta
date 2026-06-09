@@ -1677,6 +1677,28 @@ em-emoji-picker {
   vertical-align: middle;
 }
 
+/* ── Linked-players badge ───────────────────────────── */
+.linked-badge {
+  display: inline-block;
+  background: linear-gradient(135deg, #ec4899, #f472b6);
+  color: #fff;
+  font-size: .6rem;
+  font-weight: 800;
+  letter-spacing: .06em;
+  padding: 2px 6px;
+  border-radius: 20px;
+  margin-bottom: 3px;
+  animation: linked-pulse 1.4s ease-in-out infinite;
+}
+@keyframes linked-pulse {
+  0%, 100% { box-shadow: 0 0 6px rgba(244,114,182,.6), 0 0 14px rgba(244,114,182,.3); }
+  50%       { box-shadow: 0 0 14px rgba(244,114,182,.95), 0 0 28px rgba(244,114,182,.6); }
+}
+.opponent.is-linked {
+  border: 1px solid rgba(244,114,182,.5);
+  box-shadow: 0 0 12px rgba(244,114,182,.25);
+}
+
 .voice-toast {
   position: fixed;
   bottom: 5rem;

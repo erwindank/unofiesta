@@ -1,9 +1,9 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="es">
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0">
-  <title>UNO Mentiroso</title>
+  <title>UNO Fiesta</title>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Oswald:wght@700&display=swap" rel="stylesheet">
@@ -16,13 +16,21 @@
 <!-- LANDING -->
 <div id="screen-landing" class="screen active">
   <div class="landing-card">
-    <h1 class="game-title"><span class="title-uno">UNO</span><span class="title-mentiroso">Mentiroso</span></h1>
-    <p class="tagline">Juega cartas. Cuenta mentiras. ¡Atrapa al mentiroso!</p>
+    <h1 class="game-title"><span class="title-uno">UNO</span><span class="title-party">FIESTA</span></h1>
+    <p class="tagline">¡La fiesta de UNO con cartas especiales!</p>
     <div class="rules-card">
       <h2>Cómo jugar</h2>
-      <p>Hay dos tipos de cartas: <strong>Normales</strong> (se juegan boca arriba, no se puede mentir) y <strong>Mentirosas</strong> (se juegan boca abajo y debes anunciar qué carta son — puedes mentir). Las cartas mentirosas incluyen acciones y también algunos números.</p>
-      <p>Si alguien cree que mientes, puede gritar <strong>¡Mentiroso!</strong> antes del siguiente turno. Si mentías: recuperas la carta y robas 1. Si decías la verdad: el desafiante roba 1.</p>
-      <p>El <strong>7</strong> cambia tu mano con la de otro jugador. El <strong>0</strong> hace que todos pasen su mano en la dirección actual. Cuando te quede una carta, grita <strong>¡UNO!</strong></p>
+      <p>Juega cartas que coincidan en <strong>color, número o símbolo</strong> con la carta en el descarte. Si no puedes jugar, roba una carta del mazo. Cuando te quede una sola carta, grita <strong>¡UNO!</strong></p>
+      <p>En UNO Fiesta hay cartas especiales que hacen la partida más impredecible:</p>
+      <ul>
+        <li><strong>Toma Dos, Reversa, Salto y Comodín</strong>: estas son las cartas comunes de UNO; roba 2 y pierde turno, cambia dirección, salta el siguiente turno, o elige color.</li>
+        <li><strong>Jugadas Veloces</strong>: si tienes una carta numérica del mismo número y color, puedes jugarla fuera de turno para saltarte a los demás y continuar rápidamente.</li>
+        <li><strong>Comodín +4</strong>: solo puede jugarse si no tienes otra carta válida. Si alguien te acusa, debes demostrar que no tenías otra opción.</li>
+        <li><strong>Carta Apunta y Toma</strong>: inicia un mini-juego de puntos entre jugadores.</li>
+        <li><strong>Comodín Pila Salvaje</strong>: crea una mini-pila sorpresa que el siguiente jugador debe seguir.</li>
+        <li><strong>Comodín de Enlace</strong>: enlaza a dos jugadores para que roben juntos.</li>
+      </ul>
+      <p>Gana quien se quede sin cartas primero. Si quieres jugar con puntaje, suma los valores en la mano de tus oponentes al final de cada ronda.</p>
     </div>
     <div class="name-emoji-area">
       <div class="name-input-row">
@@ -100,7 +108,7 @@
       <div id="direction-indicator" class="direction-indicator"></div>
       <div class="pile-area">
         <div class="pile draw-pile" id="draw-pile-area" onclick="handleDraw()">
-          <div class="card-back"><span class="back-uno">UNO</span><span class="back-liars">LIARS</span></div>
+          <div class="card-back"><span class="back-uno">UNO</span><span class="back-party">FIESTA</span></div>
           <span class="pile-label">Robar</span>
         </div>
         <div class="pile discard-pile">

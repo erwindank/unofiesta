@@ -1,9 +1,9 @@
 // ============================================================
-// UNO MENTIROSO
+// UNO PARTY
 //
 // SETUP (one-time):
 //   1. Go to https://console.firebase.google.com
-//   2. Create a new project (any name, e.g. "unomentiroso")
+//   2. Create a new project (any name, e.g. "unoparty")
 //   3. Add a Web App (+) → copy the firebaseConfig object
 //   4. Paste the values below
 //   5. In the project console:
@@ -27,17 +27,21 @@ const FIREBASE_CONFIG = {
 const COLORS  = ['red', 'yellow', 'green', 'blue'];
 const NUMBERS = ['0','1','2','3','4','5','6','7','8','9'];
 const ACTIONS = ['skip','reverse','draw2'];
-const WILDS   = ['wild','wild4'];
-const ALL_VALUES = [...NUMBERS, ...ACTIONS, ...WILDS];
+const WILDS   = ['wild','wild4','wildc4Plus'];
+// UNO Party special cards
+const PARTY_CARDS = ['pointTaken','direction','link','wildPileUp','wildDrawnTogether','wildc4Plus'];
+const ALL_VALUES = [...NUMBERS, ...ACTIONS, ...WILDS, ...PARTY_CARDS];
 
 const VALUE_LABEL = {
   '0':'0','1':'1','2':'2','3':'3','4':'4',
   '5':'5','6':'6','7':'7','8':'8','9':'9',
-  skip:'⊘', reverse:'⇄', draw2:'+2', wild:'C', wild4:'+4'
+  skip:'⊘', reverse:'⇄', draw2:'+2', wild:'C', wild4:'+4',
+  pointTaken:'★', direction:'◉', link:'⛓', wildPileUp:'⬆', wildDrawnTogether:'⬌', wildc4Plus:'+4'
 };
 const CARD_POINTS = {
   '0':0,'1':1,'2':2,'3':3,'4':4,'5':5,'6':6,'7':7,'8':8,'9':9,
-  skip:20, reverse:20, draw2:20, wild:50, wild4:50
+  skip:20, reverse:20, draw2:20, wild:50, wild4:50,
+  pointTaken:50, direction:50, link:50, wildPileUp:50, wildDrawnTogether:50, wildc4Plus:50
 };
 const COLOR_NAME = { red:'Rojo', yellow:'Amarillo', green:'Verde', blue:'Azul', black:'Comodín' };
 
@@ -60,6 +64,7 @@ function cardStatusHTML(card) {
   const colorSpan = `<span style="color:${hex};font-weight:700">${COLOR_NAME[card.color]}</span>`;
   if (card.value === 'wild')  return `${rainbowHTML('Comodín')} y cambia el color a ${colorSpan}`;
   if (card.value === 'wild4') return `${rainbowHTML('Comodín')} <b>+4</b> y cambia el color a ${colorSpan}`;
+  if (card.value === 'wildc4Plus') return `${rainbowHTML('Comodín')} <b>+4</b> y cambia el color a ${colorSpan}`;
   return `<span style="color:${hex};font-weight:700">${COLOR_NAME[card.color]} ${VALUE_LABEL[card.value]}</span>`;
 }
 
@@ -67,17 +72,19 @@ function cardLogName(card) {
   if (!card) return '?';
   if (card.value === 'wild')  return `Comodín y cambia el color a ${COLOR_NAME[card.color]}`;
   if (card.value === 'wild4') return `Comodín +4 y cambia el color a ${COLOR_NAME[card.color]}`;
+  if (card.value === 'wildc4Plus') return `Comodín +4 y cambia el color a ${COLOR_NAME[card.color]}`;
   return `${COLOR_NAME[card.color]} ${VALUE_LABEL[card.value]}`;
 }
 
 function buildCardHTML(card, extraStyle) {
   if (!card) return '';
   const lbl = VALUE_LABEL[card.value];
-  const isWild = WILDS.includes(card.value);
+  const isWild = WILDS.includes(card.value) || PARTY_CARDS.includes(card.value);
+  const isParty = PARTY_CARDS.includes(card.value) || card.value === 'wildc4Plus';
   const centerHTML = isWild ? wildCenterHTML(card.value)
     : card.value === 'reverse' ? reverseCenterHTML()
     : `<span class="card-label center">${lbl}</span>`;
-  return `<div class="card ${card.color} ${isLiarCard(card)?'liar':''}"${extraStyle ? ` style="${extraStyle}"` : ''}>
+  return `<div class="card ${card.color}${isParty ? ' party' : ''}"${extraStyle ? ` style="${extraStyle}"` : ''}>
     ${cornerLabelHTML(card.value,'tl')}${centerHTML}${cornerLabelHTML(card.value,'br')}
   </div>`;
 }
@@ -95,7 +102,15 @@ function reverseCenterHTML() {
 }
 
 function wildCenterHTML(value) {
-  const label = value === 'wild4' ? '+4' : '';
+  let label = '';
+  if (value === 'wild4') label = '+4';
+  else if (value === 'wildc4Plus') label = '+4';
+  else if (value === 'pointTaken') label = '★';
+  else if (value === 'direction') label = '◉';
+  else if (value === 'link') label = '⛓';
+  else if (value === 'wildPileUp') label = '⬆';
+  else if (value === 'wildDrawnTogether') label = '⬌';
+  
   return `<span class="wild-quad">\
 <span class="wq r"></span><span class="wq b"></span>\
 <span class="wq y"></span><span class="wq g"></span>\
@@ -109,24 +124,27 @@ function wildCenterHTML(value) {
 function createDeck() {
   const deck = [];
   for (const color of COLORS) {
-    // 0: one normal copy, one liar copy
-    deck.push({ color, value: '0', liar: false });
-    deck.push({ color, value: '0', liar: true });
-    // 1–9: one normal copy, one liar copy each
+    // 0: one copy
+    deck.push({ color, value: '0' });
+    // 1–9: one copy each
     for (const v of ['1','2','3','4','5','6','7','8','9']) {
-      deck.push({ color, value: v, liar: false });
-      deck.push({ color, value: v, liar: true });
+      deck.push({ color, value: v });
     }
-    // Action cards: all liar cards
+    // Action cards: two of each
     for (const a of ACTIONS) {
-      deck.push({ color, value: a, liar: true });
-      deck.push({ color, value: a, liar: true });
+      deck.push({ color, value: a });
+      deck.push({ color, value: a });
+    }
+    // Party cards: one of each per color
+    for (const p of ['pointTaken','direction','link','wildPileUp','wildDrawnTogether']) {
+      deck.push({ color, value: p });
     }
   }
-  // Wild = normal (played face-up, pick a color); wild4 = liar card
+  // Wilds and party wilds: 4 copies each
   for (let i = 0; i < 4; i++) {
-    deck.push({ color: 'black', value: 'wild',  liar: false });
-    deck.push({ color: 'black', value: 'wild4', liar: true });
+    deck.push({ color: 'black', value: 'wild' });
+    deck.push({ color: 'black', value: 'wild4' });
+    deck.push({ color: 'black', value: 'wildc4Plus' });
   }
   return deck;
 }
@@ -184,7 +202,7 @@ let claimValue = null;
 let unoAlertTimeout = null;
 let currentUnoCallRequired = null;
 let unoCallClearPending = false;
-let sevenSwapMode = null; // 'normal' | 'liar' | null
+let sevenSwapMode = null; // 'normal' | null
 let drawnCardState = null; // { cardIdx, canPlay } — set after drawing, cleared when turn ends
 
 // Chat state
@@ -210,8 +228,8 @@ let musicMasterGain = null;
 let musicPlaying = false;
 let musicLoopTimer = null;
 
-function isLiarCard(card) {
-  return card && card.liar === true;
+function isPartyCard(card) {
+  return card && PARTY_CARDS.includes(card.value);
 }
 
 function handPoints(hand) {
@@ -948,21 +966,17 @@ function renderGame(state) {
   renderSpeechBubbles(state);
 
   const myTurn = isMyTurn(state) && !state.challengeOpen;
-  const canDraw = myTurn && drawnCardState === null && !state.wildChallenge;
+  const canDraw = myTurn && drawnCardState === null;
   document.getElementById('draw-pile-area').style.opacity = canDraw ? '1' : '0.5';
 
   const myHand           = state.hands?.[localUid] || [];
-  const hasGenuine       = myHand.some(c => c.value === 'wild' || (!isLiarCard(c) && isActualPlayable(c, state)));
-  const hasMatchingLiar  = myHand.some(c => isLiarCard(c) && isActualPlayable(c, state));
-  const hasAnyLiar       = myHand.some(c => isLiarCard(c));
-  const noPlayable       = canDraw && !hasGenuine && !hasAnyLiar;
-  const matchingLiarOnly = canDraw && !hasGenuine && hasMatchingLiar;
-  const nonMatchingLiar  = canDraw && !hasGenuine && !hasMatchingLiar && hasAnyLiar;
-  const normalDraw       = canDraw && hasGenuine;
-  document.getElementById('draw-pile-area').classList.toggle('can-draw',      normalDraw);
-  document.getElementById('draw-pile-area').classList.toggle('must-draw',     noPlayable);
-  document.getElementById('draw-pile-area').classList.toggle('matching-liar', matchingLiarOnly);
-  document.getElementById('draw-pile-area').classList.toggle('could-lie',     nonMatchingLiar);
+  const hasPlayable      = myHand.some(c => c.value === 'wild' || isActualPlayable(c, state));
+  
+  if (canDraw && !hasPlayable) {
+    document.getElementById('draw-pile-area').classList.add('must-draw');
+  } else {
+    document.getElementById('draw-pile-area').classList.remove('must-draw');
+  }
 }
 
 function renderTurnActions(state) {
@@ -1201,11 +1215,11 @@ function renderHand(state) {
       onclick = myTurn ? `selectCard(${i})` : '';
     }
     const lbl = VALUE_LABEL[card.value];
-    const isWild = WILDS.includes(card.value);
+    const isWild = WILDS.includes(card.value) || PARTY_CARDS.includes(card.value);
     const centerHTML = isWild ? wildCenterHTML(card.value)
       : card.value === 'reverse' ? reverseCenterHTML()
       : `<span class="card-label center">${lbl}</span>`;
-    return `<div class="card ${card.color} ${isLiarCard(card) ? 'liar' : ''}${isPlayable ? ' playable' : ''}${extraClass}"
+    return `<div class="card ${card.color}${isPlayable ? ' playable' : ''}${extraClass}"
       data-index="${i}"
       onclick="${onclick}"
     >
@@ -2134,8 +2148,8 @@ async function selectCard(index) {
 
   if (drawnCardState !== null && index === drawnCardState.cardIdx && !drawnCardState.canPlay) return;
 
-  if (card.value !== 'wild' && !isLiarCard(card) && !isActualPlayable(card, roomState)) {
-    alert('No puedes jugar esta carta boca arriba. Elige otra o roba.');
+  if (card.value !== 'wild' && !isActualPlayable(card, roomState)) {
+    alert('No puedes jugar esta carta. Elige otra o roba.');
     return;
   }
 
@@ -2143,9 +2157,6 @@ async function selectCard(index) {
   selectedActualCard = card;
   if (card.color === 'black') {
     claimColor = roomState.topColor || 'red';
-  } else if (isLiarCard(card) && card.color !== roomState.topColor && card.value !== roomState.topValue) {
-    // Default to a valid claim: use top color so the claim matches by color
-    claimColor = roomState.topColor || card.color;
   } else {
     claimColor = card.color;
   }
@@ -2157,7 +2168,7 @@ async function selectCard(index) {
   const _centerHTML = _isWild ? wildCenterHTML(card.value)
     : card.value === 'reverse' ? reverseCenterHTML()
     : `<span class="card-label center" style="font-size:1.2rem">${_lbl}</span>`;
-  preview.innerHTML = `<div class="card ${card.color} ${isLiarCard(card) ? 'liar' : ''}" style="width:50px;height:75px;margin:0 auto">
+  preview.innerHTML = `<div class="card ${card.color}" style="width:50px;height:75px;margin:0 auto">
     ${cornerLabelHTML(card.value, 'tl')}
     ${_centerHTML}
     ${cornerLabelHTML(card.value, 'br')}
@@ -2168,9 +2179,14 @@ async function selectCard(index) {
     document.getElementById('actual-card-preview').classList.add('hidden');
     renderClaimPicker();
     document.getElementById('claim-dialog').classList.remove('hidden');
-  } else if (isLiarCard(card)) {
-    document.getElementById('claim-dialog-title').textContent = 'Declara esta carta como…';
-    document.getElementById('actual-card-preview').classList.remove('hidden');
+  } else if (card.value === 'wild4') {
+    document.getElementById('claim-dialog-title').textContent = 'Elige el color para el +4';
+    document.getElementById('actual-card-preview').classList.add('hidden');
+    renderClaimPicker();
+    document.getElementById('claim-dialog').classList.remove('hidden');
+  } else if (card.value === 'wildc4Plus') {
+    document.getElementById('claim-dialog-title').textContent = 'Elige el color para el +4';
+    document.getElementById('actual-card-preview').classList.add('hidden');
     renderClaimPicker();
     document.getElementById('claim-dialog').classList.remove('hidden');
   } else if (card.value === '7') {
@@ -2195,7 +2211,7 @@ function renderClaimPicker() {
     valuePicker.innerHTML = '';
   } else {
     // Regular wild is always face-up — can never be lied about.
-    // Wild4 can be declared by any liar card.
+    // Wild4 can be declared by any party card.
     const allowedValues = ALL_VALUES.filter(v => v !== 'wild');
     valuePicker.innerHTML = allowedValues.map(v => {
       const label = v === 'wild4' ? 'COMODÍN +4' : VALUE_LABEL[v];
@@ -2208,7 +2224,6 @@ function renderClaimPicker() {
 function setClaimColor(color) { claimColor = color; renderClaimPicker(); }
 function setClaimValue(value) {
   if (value === 'wild') return;
-  if (selectedActualCard && !isLiarCard(selectedActualCard)) return;
   claimValue = value;
   renderClaimPicker();
 }
@@ -2233,24 +2248,16 @@ async function confirmPlay() {
     return;
   }
 
-  if (isLiarCard(actualCard)) {
-    const claimedCard = { color: claimColor, value: claimValue };
-
-    if (!isClaimPlayable(claimedCard, roomState)) {
-      alert(
-        `¡Ese anuncio no es válido!\n\n` +
-        `Carta superior: ${COLOR_NAME[roomState.topColor]} ${VALUE_LABEL[roomState.topValue]}\n\n` +
-        `Tu carta debe coincidir por color o valor, o ser un Comodín.`
-      );
-      return;
-    }
-
+  if (actualCard.value === 'wild4' || actualCard.value === 'wildc4Plus') {
     document.getElementById('claim-dialog').classList.add('hidden');
-    await doPlayCard(actualCard, claimedCard, selectedCardIdx);
-  } else {
-    document.getElementById('claim-dialog').classList.add('hidden');
-    await playNormalCard(actualCard, selectedCardIdx, claimColor);
+    await startWildChallenge(actualCard, claimColor, selectedCardIdx);
+    selectedCardIdx = null;
+    selectedActualCard = null;
+    return;
   }
+
+  document.getElementById('claim-dialog').classList.add('hidden');
+  await playNormalCard(actualCard, selectedCardIdx, claimColor);
 
   selectedCardIdx = null;
   selectedActualCard = null;
@@ -2460,11 +2467,11 @@ function buildWcCardTable(wc, state) {
                   : '✗';
       cardHTML = `<div class="wc-slot-flipped ${cls}">${buildCardHTML(flippedEntry.card)}<div class="wc-flip-badge">${badge}</div></div>`;
     } else if (wc.submittedCards?.[pid]) {
-      cardHTML = `<div class="wc-card-back"><span class="back-uno">UNO</span><span class="back-liars">LIARS</span></div>`;
+      cardHTML = `<div class="wc-card-back"><span class="back-uno">UNO</span><span class="back-party">FIESTA</span></div>`;
     } else if (wc.playersNeeded?.includes(pid)) {
       cardHTML = `<div class="wc-slot-empty">?</div>`;
     } else {
-      cardHTML = `<div class="wc-card-back"><span class="back-uno">UNO</span><span class="back-liars">LIARS</span></div>`;
+      cardHTML = `<div class="wc-card-back"><span class="back-uno">UNO</span><span class="back-party">FIESTA</span></div>`;
     }
     return `<div class="wc-card-slot">${cardHTML}<span class="wc-slot-name">${esc(p.name)}</span></div>`;
   }).join('');
@@ -2520,7 +2527,7 @@ function renderWildChallenge(state) {
         const center = WILDS.includes(card.value) ? wildCenterHTML(card.value)
           : card.value === 'reverse' ? reverseCenterHTML()
           : `<span class="card-label center">${lbl}</span>`;
-        return `<div class="card ${card.color} ${isLiarCard(card)?'liar':''} ${disabled?'wc-disabled':'playable'}"
+        return `<div class="card ${card.color} ${disabled?'wc-disabled':'playable'}"
           ${disabled ? '' : `onclick="submitWildCard(${i})"`}>
           ${cornerLabelHTML(card.value,'tl')}${center}${cornerLabelHTML(card.value,'br')}
         </div>`;
@@ -2579,8 +2586,7 @@ function renderWildChallenge(state) {
 // SEVEN SWAP
 // ============================================================
 
-function showSevenSwapDialog(mode) {
-  sevenSwapMode = mode;
+function showSevenSwapDialog() {
   const state = roomState;
   const others = state.players.filter(p => p.id !== localUid);
   document.getElementById('seven-swap-player-list').innerHTML = others.map(p =>
@@ -2589,28 +2595,20 @@ function showSevenSwapDialog(mode) {
       ${esc(p.name)} (${p.cardCount} cartas)
     </button>`
   ).join('');
-  document.getElementById('seven-swap-cancel-row').classList.toggle('hidden', mode === 'liar');
   document.getElementById('seven-swap-dialog').classList.remove('hidden');
 }
 
 function cancelSevenSwap() {
   document.getElementById('seven-swap-dialog').classList.add('hidden');
-  sevenSwapMode = null;
   selectedCardIdx = null;
   selectedActualCard = null;
 }
 
 async function pickSevenSwapTarget(targetId) {
-  const mode = sevenSwapMode;
-  sevenSwapMode = null;
   document.getElementById('seven-swap-dialog').classList.add('hidden');
-  if (mode === 'normal') {
-    await playNormalCardWithSwap(selectedActualCard, selectedCardIdx, targetId);
-    selectedCardIdx = null;
-    selectedActualCard = null;
-  } else {
-    await executeSevenSwap(targetId);
-  }
+  await playNormalCardWithSwap(selectedActualCard, selectedCardIdx, targetId);
+  selectedCardIdx = null;
+  selectedActualCard = null;
 }
 
 async function playNormalCardWithSwap(actualCard, cardIndex, targetId) {
@@ -2707,15 +2705,10 @@ async function executeSevenSwap(targetId) {
 function renderSevenSwapOverlay(state) {
   const pending = state.sevenSwapPending;
   if (!pending || pending.chooserId !== localUid) {
-    if (sevenSwapMode === 'liar') {
-      document.getElementById('seven-swap-dialog').classList.add('hidden');
-      sevenSwapMode = null;
-    }
+    document.getElementById('seven-swap-dialog').classList.add('hidden');
     return;
   }
-  if (sevenSwapMode !== 'liar') {
-    showSevenSwapDialog('liar');
-  }
+  showSevenSwapDialog();
 }
 
 async function playNormalCard(actualCard, cardIndex, chosenColor = null) {
@@ -2828,7 +2821,7 @@ async function handleChallenge() {
 
   const actual  = state.lastActualCard;
   const claimed = state.lastClaimedCard;
-  const liar    = state.players.find(p => p.id === state.lastPlayerId);
+  const player  = state.players.find(p => p.id === state.lastPlayerId);
   // For wild cards (black), color is a free choice — only compare value
   const isLie   = actual.value !== claimed.value ||
     (actual.color !== 'black' && actual.color !== claimed.color);
@@ -2844,7 +2837,7 @@ async function handleChallenge() {
       p.id === state.lastPlayerId ? { ...p, cardCount: hands[p.id].length } : p
     );
     log = addLog(log,
-      `🚨 ¡${localName} descubrió a ${liar?.name}! Mintió (era ${cardLogName(actual)}). ${liar?.name} recuperó la carta y robó ${drawn.length} más.`
+      `🚨 ¡${localName} desafió a ${player?.name}! ${player?.name} perdió y recuperó la carta, luego robó ${drawn.length} más.`
     );
 
     await db.collection('rooms').doc(currentRoomId).update({
@@ -2865,7 +2858,7 @@ async function handleChallenge() {
   } else {
     // Honesto: el desafiante roba 1 carta y se aplica el efecto
     log = addLog(log,
-      `✓ ${localName} acusó a ${liar?.name}, pero ${liar?.name} dijo la Verdad (${actual?.value === 'wild' ? 'Comodín' : actual?.value === 'wild4' ? 'Comodín +4' : cardLogName(actual)}). ${localName} roba 1.`
+      `✓ ${localName} desafió a ${player?.name}, pero ${player?.name} jugó honestamente (${actual?.value === 'wild' ? 'Comodín' : actual?.value === 'wild4' ? 'Comodín +4' : cardLogName(actual)}). ${localName} roba 1.`
     );
 
     const lastPlayerWon = (hands?.[state.lastPlayerId] || []).length === 0;
@@ -2883,7 +2876,7 @@ async function handleChallenge() {
         drawPile: newDrawPile,
         status: 'ended',
         winner: state.lastPlayerId,
-        winnerName: liar?.name,
+        winnerName: player?.name,
         topColor: claimed.color,
         topValue: claimed.value,
         challengeOpen: false,
@@ -3081,7 +3074,7 @@ function applyEffectsAndAdvance(state) {
       direction = -direction;
       if (activeN === 2) {
         // Con 2 jugadores activos, Reverse = Skip: el mismo jugador juega de nuevo
-        logExtra = `${players[nextIdx]?.name} pierde su turno (reverse).`;
+        logExtra = `${players[nextIdx]?.name} pierde su turno (reversa).`;
         newIdx   = currentPlayerIndex;
       } else {
         logExtra = '¡Dirección invertida!';
@@ -3165,28 +3158,13 @@ async function handleDraw() {
   if (drawnCardState !== null) return;
 
   const myHand          = state.hands?.[localUid] || [];
-  const hasGenuine      = myHand.some(c => c.value === 'wild' || (!isLiarCard(c) && isActualPlayable(c, state)));
-  const hasMatchingLiar = myHand.some(c => isLiarCard(c) && isActualPlayable(c, state));
-  const hasAnyLiar      = myHand.some(c => isLiarCard(c));
-  if (hasGenuine) {
+  const hasPlayable     = myHand.some(c => c.value === 'wild' || isActualPlayable(c, state));
+  
+  if (hasPlayable) {
     const ok = await showDrawConfirm(
       'white', '✋',
       'Tienes cartas jugables',
-      'Tienes cartas que puedes jugar en este turno. ¿Quieres robar de todas formas?'
-    );
-    if (!ok) return;
-  } else if (!hasGenuine && hasMatchingLiar) {
-    const ok = await showDrawConfirm(
-      'yellow', '🃏',
-      '¡Tienes cartas jugables!',
-      'Tienes cartas de mentira que coinciden con el descarte y puedes jugarlas. ¿Seguro que quieres robar de todas formas?'
-    );
-    if (!ok) return;
-  } else if (!hasGenuine && !hasMatchingLiar && hasAnyLiar) {
-    const ok = await showDrawConfirm(
-      'red', '🎴',
-      'Solo tienes cartas de mentira',
-      'No tienes cartas jugables honestamente, pero puedes jugar una carta de mentira. ¿Quieres robar de todas formas?'
+      'Tienes cartas que puedes jugar. ¿Quieres robar de todas formas?'
     );
     if (!ok) return;
   }
@@ -3201,7 +3179,6 @@ async function handleDraw() {
   const drawnCard = newHand[newHand.length - 1];
   const canPlay = !!(drawnCard && (
     drawnCard.value === 'wild' ||
-    isLiarCard(drawnCard) ||
     isActualPlayable(drawnCard, state)
   ));
   drawnCardState = { cardIdx: newHand.length - 1, canPlay };

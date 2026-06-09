@@ -19,31 +19,37 @@ body {
   font-family: 'Segoe UI', system-ui, sans-serif;
   background: var(--bg);
   color: var(--text);
-  height: 100dvh;
-  overflow: hidden;
+  min-height: 100dvh;
+  overflow-x: hidden;
   user-select: none;
 }
 
 /* ---- SCREENS ---- */
-.screen { display: none; height: 100dvh; }
-.screen.active { display: flex; flex-direction: column; }
+.screen { display: none; min-height: 100dvh; }
+.screen.active { display: flex; flex-direction: column; overflow: auto; }
 
 /* ---- LANDING ---- */
 #screen-landing {
   align-items: center;
   justify-content: center;
   background: radial-gradient(ellipse at center, #1a3060 0%, #06090f 70%);
+  padding: 1rem 0;
 }
 .landing-card {
-  background: var(--surface);
-  border: 1px solid var(--border);
+  background: rgba(17, 30, 57, 0.96);
+  border: 1px solid rgba(255,255,255,.08);
+  box-shadow: 0 28px 70px rgba(0,0,0,.35);
+  backdrop-filter: blur(16px);
   border-radius: var(--radius);
   padding: 2rem;
-  width: min(400px, 92vw);
+  width: min(520px, 94vw);
   display: flex;
   flex-direction: column;
   gap: 1.2rem;
+  max-height: none;
+  overflow: visible;
 }
+
 .game-title {
   text-align: center;
   line-height: 1;
@@ -65,14 +71,18 @@ body {
   outline: 3px solid var(--blue);
   line-height: 1.1;
 }
-.title-mentiroso {
+.title-party {
   font-family: 'Oswald', sans-serif;
   font-weight: 700;
   font-size: 2.1rem;
   text-transform: uppercase;
   letter-spacing: 6px;
   color: #fff;
-  text-shadow: 2px 2px 0 var(--blue), -1px -1px 0 #000;
+  background: linear-gradient(45deg, var(--red), var(--yellow), var(--green), var(--blue));
+  background-clip: text;
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  text-shadow: 2px 2px 0 rgba(255,255,255,.1);
   margin-top: 0.15em;
 }
 .tagline { text-align: center; color: var(--muted); font-size: .9rem; }
@@ -100,6 +110,17 @@ input[type=text]:focus { border-color: var(--blue); }
 }
 .rules-card h2 { margin-bottom: .5rem; font-size: 1rem; color: #fff; }
 .rules-card p  { margin-bottom: .55rem; }
+.rules-card ul {
+  padding-left: 1.2rem;
+  margin: .85rem 0;
+  list-style-position: inside;
+}
+.rules-card li {
+  margin-bottom: .65rem;
+}
+.rules-card li:last-child {
+  margin-bottom: 0;
+}
 
 .btn-group { display: flex; gap: .75rem; }
 .btn-group .btn { flex: 1; }
@@ -327,7 +348,7 @@ input[type=text]:focus { border-color: var(--blue); }
   letter-spacing: 1.5px;
   text-shadow: 0 0 8px rgba(255,200,0,.7), 0 1px 3px rgba(0,0,0,.9);
 }
-.draw-pile .card-back .back-liars {
+.draw-pile .card-back .back-party {
   position: relative;
   z-index: 1;
   color: #e02020;
@@ -481,6 +502,9 @@ input[type=text]:focus { border-color: var(--blue); }
   box-shadow: 2px 4px 12px rgba(0,0,0,.55), inset 0 1px 0 rgba(255,255,255,.08);
   transition: transform .15s;
   overflow: hidden;
+}
+.card.party {
+  box-shadow: 0 24px 55px rgba(255,255,255,.08), inset 0 0 0 1px rgba(255,255,255,.18);
 }
 
 /* Normal card — fully vibrant background */
@@ -1165,7 +1189,7 @@ input[type=text]:focus { border-color: var(--blue); }
   letter-spacing: 1px;
   text-shadow: 0 0 6px rgba(255,200,0,.6);
 }
-.wc-card-back .back-liars {
+.wc-card-back .back-party {
   position: relative;
   z-index: 1;
   color: #e02020;

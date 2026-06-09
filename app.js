@@ -3300,12 +3300,53 @@ async function playNormalCard(actualCard, cardIndex, chosenColor = null) {
     log = addLog(log, 'Todos pasan su mano en la dirección actual.');
   }
 
+  // Compute action card effects (reverse, skip, draw2)
+  const n = state.players.length;
+  const activeN = state.players.filter(p => !p.disconnected).length;
+  let direction = state.direction;
+  let drawPile = state.drawPile || [];
+
+  const nextActive = (fromIdx, dir) => {
+    let idx = ((fromIdx + dir) % n + n) % n;
+    for (let i = 0; i < n && state.players[idx]?.disconnected; i++) {
+      idx = ((idx + dir) % n + n) % n;
+    }
+    return idx;
+  };
+
+  const nextIdx = nextActive(state.currentPlayerIndex, direction);
+  let newCurrentPlayerIndex = nextIdx;
+
+  if (actualCard.value === 'reverse') {
+    direction = -direction;
+    if (activeN === 2) {
+      log = addLog(log, `${state.players[nextIdx]?.name} pierde su turno (reversa).`);
+      newCurrentPlayerIndex = state.currentPlayerIndex;
+    } else {
+      log = addLog(log, '¡Dirección invertida!');
+      newCurrentPlayerIndex = nextActive(state.currentPlayerIndex, direction);
+    }
+  } else if (actualCard.value === 'skip') {
+    log = addLog(log, `${state.players[nextIdx]?.name} pierde su turno.`);
+    newCurrentPlayerIndex = nextActive(nextIdx, direction);
+  } else if (actualCard.value === 'draw2') {
+    const drawTarget = state.players[nextIdx];
+    const { drawn, newDrawPile } = takeCards(drawPile, 2);
+    drawPile = newDrawPile;
+    newHands[drawTarget.id] = [...(newHands[drawTarget.id] || []), ...drawn];
+    players = players.map(p => ({ ...p, cardCount: (newHands[p.id] || []).length }));
+    log = addLog(log, `${drawTarget.name} roba 2 y pierde su turno.`);
+    newCurrentPlayerIndex = nextActive(nextIdx, direction);
+  }
+
   const update = {
     players,
     hands: newHands,
     topColor,
     topValue,
-    currentPlayerIndex: nextPlayerIndex(state),
+    direction,
+    drawPile,
+    currentPlayerIndex: newCurrentPlayerIndex,
     challengeOpen: false,
     lastActualCard: null,
     lastClaimedCard: null,

@@ -1195,7 +1195,7 @@ function renderHand(state) {
     let isPlayable, onclick, extraClass = '';
     const speedPlayable = canSpeedPlay && NUMBERS.includes(card.value) &&
       card.color === state.topColor && card.value === state.topValue;
-    const pilePlayable = isPileHolder && (card.color === 'black' || card.color === pilePhase.pileColor);
+    const pilePlayable = isPileHolder && card.color === pilePhase.pileColor;
 
     if (inDrawMode) {
       const isDrawn = i === drawnCardState.cardIdx;
@@ -2160,7 +2160,7 @@ async function selectCard(index) {
     const phase = roomState.wildPileUpPhase;
     const holderPlayer = roomState.players[phase.holderIndex];
     if (holderPlayer?.id === localUid) {
-      if (card.color === 'black' || card.color === phase.pileColor) {
+      if (card.color === phase.pileColor) {
         await handlePlayOnPile(index);
       }
     }
@@ -2892,8 +2892,7 @@ async function handlePlayOnPile(cardIndex) {
   const myHand = [...(state.hands?.[localUid] || [])];
   const card = myHand[cardIndex];
   if (!card) return;
-  // Validate: must be Wild or match pile color
-  if (card.color !== 'black' && card.color !== phase.pileColor) return;
+  if (card.color !== phase.pileColor) return;
 
   const newHand = myHand.filter((_, i) => i !== cardIndex);
   let newHands = { ...state.hands, [localUid]: newHand };
@@ -2908,7 +2907,7 @@ async function handlePlayOnPile(cardIndex) {
   const nextIdx = ((phase.holderIndex + state.direction) % n + n) % n;
   const nextHolder = players[nextIdx];
   const nextHand = state.hands?.[nextHolder?.id] || [];
-  const nextCanPlay = nextHand.some(c => c.color === 'black' || c.color === newPileColor);
+  const nextCanPlay = nextHand.some(c => c.color === newPileColor);
 
   let log = addLog(state.log,
     `${localName} jugó ${COLOR_NAME[card.color]} ${VALUE_LABEL[card.value]} en la mini-pila.`
@@ -2975,7 +2974,7 @@ function renderWildPileUpPanel(state) {
   const holder = state.players[phase.holderIndex];
   const isHolder = holder?.id === localUid;
   const myHand = state.hands?.[localUid] || [];
-  const hasMatch = myHand.some(c => c.color === 'black' || c.color === phase.pileColor);
+  const hasMatch = myHand.some(c => c.color === phase.pileColor);
 
   document.getElementById('pu-title').innerHTML =
     `⬆ Mini-Pila — color <strong style="color:${LOG_COLOR_HEX[phase.pileColor]}">${COLOR_NAME[phase.pileColor]}</strong>` +
@@ -3070,7 +3069,7 @@ async function startWildDrawnTogether(cardIndex, linkedIds, chosenColor) {
   const p1 = state.players.find(p => p.id === linkedIds[0])?.name || '?';
   const p2 = state.players.find(p => p.id === linkedIds[1])?.name || '?';
   const log = addLog(state.log,
-    `${localName} jugó ⬌ Wild Drawn Together. ¡${p1} y ${p2} están enlazados! Color: ${COLOR_NAME[chosenColor]}.`
+    `${localName} jugó ⬌ Comodín de Enlace. ¡${p1} y ${p2} están enlazados! Color: ${COLOR_NAME[chosenColor]}.`
   );
   await db.collection('rooms').doc(currentRoomId).update({
     players, hands: newHands,
@@ -4634,7 +4633,7 @@ async function botWild4Accept(state) {
 async function botWildPileUpAct(state, botId, botName) {
   const phase = state.wildPileUpPhase;
   const myHand = [...(state.hands?.[botId] || [])];
-  const matchIdx = myHand.findIndex(c => c.color === 'black' || c.color === phase.pileColor);
+  const matchIdx = myHand.findIndex(c => c.color === phase.pileColor);
 
   if (matchIdx === -1) {
     // Take the pile
@@ -4667,7 +4666,7 @@ async function botWildPileUpAct(state, botId, botName) {
   const nextIdx = ((phase.holderIndex + state.direction) % n + n) % n;
   const nextHolder = players[nextIdx];
   const nextHand = state.hands?.[nextHolder?.id] || [];
-  const nextCanPlay = nextHand.some(c => c.color === 'black' || c.color === newPileColor);
+  const nextCanPlay = nextHand.some(c => c.color === newPileColor);
 
   let log = addLog(state.log,
     `${botName} jugó ${COLOR_NAME[card.color]} ${VALUE_LABEL[card.value]} en la mini-pila.`
@@ -4844,7 +4843,7 @@ async function botPlayCard(state, botId, botName, card, cardIdx) {
     const p1 = state.players.find(p => p.id === linked[0])?.name || '?';
     const p2 = state.players.find(p => p.id === linked[1])?.name || '?';
     const log = addLog(state.log,
-      `${botName} jugó ⬌ Wild Drawn Together. ¡${p1} y ${p2} están enlazados! Color: ${COLOR_NAME[color]}.`
+      `${botName} jugó ⬌ Comodín de Enlace. ¡${p1} y ${p2} están enlazados! Color: ${COLOR_NAME[color]}.`
     );
     await db.collection('rooms').doc(currentRoomId).update({
       players, hands: newHands,

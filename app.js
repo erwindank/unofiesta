@@ -36,7 +36,7 @@ const VALUE_LABEL = {
   '1':'1','2':'2','3':'3','4':'4',
   '5':'5','6':'6','7':'7','8':'8','9':'9',
   skip:'⊘', reverse:'⇄', draw2:'+2', wild:'C', wild4:'+4',
-  pointTaken:'☝️', wildPileUp:'⬆', wildDrawnTogether:'⬌', wildc4Plus:'+4'
+  pointTaken:'☝️', wildPileUp:'📚', wildDrawnTogether:'🔗', wildc4Plus:'+4'
 };
 const CARD_POINTS = {
   '1':1,'2':2,'3':3,'4':4,'5':5,'6':6,'7':7,'8':8,'9':9,
@@ -103,8 +103,8 @@ function wildCenterHTML(value) {
   if (value === 'wild4') label = '+4';
   else if (value === 'wildc4Plus') label = '+4';
   else if (value === 'pointTaken') label = '☝️';
-  else if (value === 'wildPileUp') label = '⬆';
-  else if (value === 'wildDrawnTogether') label = '⬌';
+  else if (value === 'wildPileUp') label = '📚';
+  else if (value === 'wildDrawnTogether') label = '🔗';
   
   return `<span class="wild-quad">\
 <span class="wq r"></span><span class="wq b"></span>\
@@ -3468,10 +3468,19 @@ async function handleDraw() {
   const canPlay = !!(drawnCard && isActualPlayable(drawnCard, state));
   drawnCardState = { cardIdx: newHand.length - 1, canPlay };
 
+  let log = state.log;
+  if (drawLinkedPartnerId) {
+    const partner = state.players.find(p => p.id === drawLinkedPartnerId);
+    if (partner) {
+      log = addLog(log, `${partner.name} también roba 1 carta (enlazados).`);
+    }
+  }
+
   const drawUpdate = {
     hands: newHands,
     drawPile,
     players,
+    log,
     lastActivity: firebase.firestore.FieldValue.serverTimestamp()
   };
   if (drawLinkedPartnerId) {
@@ -4874,6 +4883,7 @@ async function botDrawAndPass(state, botId, botName) {
   // Linked partner also draws 1 and loses their turn
   const linked = state.linkedPlayers;
   let botDrawSkips = state.pendingSkips ? [...state.pendingSkips] : [];
+  let botDrawPartnerId = null;
   if (linked?.includes(botId) && drawn.length > 0) {
     const partnerId = linked[0] === botId ? linked[1] : linked[0];
     const partner = state.players.find(p => p.id === partnerId && !p.disconnected);
@@ -4882,11 +4892,19 @@ async function botDrawAndPass(state, botId, botName) {
       drawPile = npd;
       newHands = { ...newHands, [partnerId]: [...(newHands[partnerId] || []), ...pd] };
       if (!botDrawSkips.includes(partnerId)) botDrawSkips.push(partnerId);
+      botDrawPartnerId = partnerId;
     }
   }
 
   const players = state.players.map(p => ({ ...p, cardCount: (newHands[p.id] || []).length }));
-  const log = addLog(state.log, `${botName} robó una carta y pasó.`);
+  let log = state.log;
+  if (botDrawPartnerId) {
+    const partner = state.players.find(p => p.id === botDrawPartnerId);
+    if (partner) {
+      log = addLog(log, `${partner.name} también roba 1 carta (enlazados).`);
+    }
+  }
+  log = addLog(log, `${botName} robó una carta y pasó.`);
   const botDrawUpdate = {
     hands: newHands, players, drawPile,
     currentPlayerIndex: nextPlayerIndex(state),

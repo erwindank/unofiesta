@@ -1170,6 +1170,11 @@ function renderOpponents(state) {
   }).join('');
 }
 
+function directionCardHTML(direction) {
+  const symbol = direction === 1 ? '↻' : '↺';
+  return `<div class="card black direction-card"><span class="card-label center">${symbol}</span></div>`;
+}
+
 function renderStatus(state) {
   const el = document.getElementById('game-status');
   const current = state.players[state.currentPlayerIndex];
@@ -1179,7 +1184,7 @@ function renderStatus(state) {
   el.classList.toggle('other-turn', !myTurn);
 
   const dirEl = document.getElementById('direction-indicator');
-  if (dirEl) dirEl.textContent = state.direction === 1 ? '↻' : '↺';
+  if (dirEl) dirEl.innerHTML = directionCardHTML(state.direction);
 
   if (myTurn) {
     el.textContent = '🎊 ¡Tu turno! Elige una carta.';

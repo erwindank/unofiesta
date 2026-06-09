@@ -4749,7 +4749,6 @@ async function botPlayCard(state, botId, botName, card, cardIdx) {
     `${botName} jugó ${COLOR_NAME[card.color]} ${VALUE_LABEL[card.value]}.`
   );
 
-  const n = state.players.length;
   const activeN = state.players.filter(p => !p.disconnected).length;
   let direction = state.direction;
   let drawPile = state.drawPile || [];

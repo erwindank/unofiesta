@@ -903,7 +903,7 @@ function renderLobby(state) {
   if (isHost) {
     const canAddBot = state.players.length < 10;
     botArea.innerHTML = canAddBot
-      ? `<button class="btn btn-ghost btn-sm" onclick="handleAddBot()">+ Añadir bot</button>`
+      ? `<button class="btn btn-sm" style="background:#c0186c;color:#fff;font-weight:700;border:none;box-shadow:0 0 12px rgba(192,24,108,.5);" onclick="handleAddBot()">+ Añadir bot</button>`
       : '';
   } else {
     botArea.innerHTML = '';

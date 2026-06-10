@@ -3990,18 +3990,6 @@ async function doBotTick(state) {
 }
 
 async function runBotTick(state) {
-  // 0. If a bot needs to yell UNO for themselves, do it before anything else
-  if (state.unoCallRequired && isBot(state.unoCallRequired.playerId)) {
-    const req = state.unoCallRequired;
-    const log = addLog(state.log, `${req.playerName} grita ¡UNO! 🎴`);
-    await db.collection('rooms').doc(currentRoomId).update({
-      unoCallRequired: firebase.firestore.FieldValue.delete(),
-      log,
-      lastActivity: firebase.firestore.FieldValue.serverTimestamp()
-    });
-    return;
-  }
-
   // 3. Point taken phase: bots vote
   if (state.pointTakenPhase) {
     const bots = state.players.filter(p =>

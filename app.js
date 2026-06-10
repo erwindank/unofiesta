@@ -44,6 +44,7 @@ const CARD_POINTS = {
   pointTaken:20, wildPileUp:50, wildDrawnTogether:50, wildc4Plus:50
 };
 const COLOR_NAME = { red:'Rojo', yellow:'Amarillo', green:'Verde', blue:'Azul', black:'Comodín' };
+const WILD_LOG_NAME = { wild:'Comodín', wild4:'Comodín +4', wildPileUp:'Comodín Pila 📚', wildDrawnTogether:'Comodín Unión 🔗', wildc4Plus:'Comodín +4 Especial' };
 
 // Declared here (not in the Spotify section below) because handleSpotifyCallback()
 // is called from init() before the Spotify section is reached, and const is not hoisted.
@@ -1118,7 +1119,7 @@ async function handleUnoCallBtn() {
         p.id === req.playerId ? { ...p, cardCount: hands[p.id].length } : p
       );
       const log = addLog(state.log,
-        `🚨 ${localName} le gritó UNO a ${req.playerName}. ${req.playerName} roba 2 cartas.`
+        `🚨 ${localName} le gritó UNO a ${req.playerName}. ${req.playerName} saca 2 cartas.`
       );
       transaction.update(roomRef, {
         hands,
@@ -1260,8 +1261,8 @@ function renderHand(state) {
       : `Mini-pila (${COLOR_NAME[pilePhase.pileColor]}) — no tienes cartas jugables`;
   } else if (inDrawMode) {
     document.getElementById('hand-label').textContent = drawnCardState.canPlay
-      ? '¡Carta robada jugable! Juega cualquier carta válida o pasa.'
-      : 'Carta robada no jugable. Juega una carta válida o pasa.';
+      ? '¡Sacaste una carta jugable! Juega cualquier carta válida o pasa.'
+      : 'Sacaste una carta no jugable. Juega una carta válida o pasa.';
   } else {
     document.getElementById('hand-label').textContent =
       myTurn ? 'Tu turno — haz clic en una carta para jugar' : `Tu mano (${myHand.length})`;
@@ -2196,7 +2197,7 @@ async function selectCard(index) {
   if (drawnCardState !== null && index === drawnCardState.cardIdx && !drawnCardState.canPlay) return;
 
   if (!isActualPlayable(card, roomState)) {
-    alert('No puedes jugar esta carta. Elige otra o roba.');
+    alert('No puedes jugar esta carta. Elige otra o toma una.');
     return;
   }
 
@@ -2362,7 +2363,7 @@ async function handlePointTakenVote(targetId) {
       const { drawn, newDrawPile } = takeCards(drawPile, count);
       drawPile = newDrawPile;
       hands = { ...hands, [p.id]: [...(hands[p.id] || []), ...drawn] };
-      log = addLog(log, `${p.name} fue apuntado ${count} ${count === 1 ? 'vez' : 'veces'} → roba ${count}.`);
+      log = addLog(log, `${p.name} fue apuntado ${count} ${count === 1 ? 'vez' : 'veces'} → saca ${count}.`);
 
       if (linked?.includes(p.id)) {
         const partnerId = linked[0] === p.id ? linked[1] : linked[0];
@@ -2371,7 +2372,7 @@ async function handlePointTakenVote(targetId) {
           const { drawn: pd, newDrawPile: npd } = takeCards(drawPile, count);
           drawPile = npd;
           hands = { ...hands, [partnerId]: [...(hands[partnerId] || []), ...pd] };
-          log = addLog(log, `${partner.name} también roba ${count} (enlazados).`);
+          log = addLog(log, `${partner.name} también saca ${count} (enlazados).`);
         }
       }
     }
@@ -2430,21 +2431,27 @@ async function startWildPileUp(card, cardIndex) {
   let { drawPile } = state;
   const won = newHand.length === 0;
 
-  // Draw cards from the pile until we get a non-Wild card
+  // Draw cards from the pile until we get a color (non-wild) card; discard wilds
   const pile = [];
+  const discardedWilds = [];
   for (let attempts = 0; attempts < 10; attempts++) {
     const { drawn, newDrawPile } = takeCards(drawPile, 1);
     if (!drawn.length) break;
     drawPile = newDrawPile;
+    if (drawn[0].color === 'black') { discardedWilds.push(drawn[0]); continue; }
     pile.push(drawn[0]);
-    if (drawn[0].color !== 'black') break;
+    break;
   }
   const pileColor = pile.length ? pile[pile.length - 1].color : state.topColor;
 
   const n = state.players.length;
   const nextIdx = ((state.currentPlayerIndex + state.direction) % n + n) % n;
 
-  const log = addLog(state.log,
+  let log = state.log;
+  for (const dc of discardedWilds) {
+    log = addLog(log, `Se sacó ${WILD_LOG_NAME[dc.value] || 'Comodín'} del mazo: no es carta de color para la dinámica Pila Salvaje — fue descartada.`);
+  }
+  log = addLog(log,
     `${localName} jugó ⬆ Comodín Pila Salvaje. Mini-pila con ${pile.length} carta(s), color ${COLOR_NAME[pileColor]}.`
   );
 
@@ -2551,7 +2558,7 @@ async function handleTakePile() {
   if (linkedTakePartnerId) {
     const partner = state.players.find(p => p.id === linkedTakePartnerId);
     if (partner) {
-      log = addLog(log, `${partner.name} también roba ${pileCount} carta${pileCount === 1 ? '' : 's'} (enlazados).`);
+      log = addLog(log, `${partner.name} también saca ${pileCount} carta${pileCount === 1 ? '' : 's'} (enlazados).`);
     }
   }
 
@@ -2754,7 +2761,7 @@ function renderWild4ChallengeArea(state) {
     <div class="w4c-hand">${handHTML || '<em style="color:var(--muted)">Mano vacía</em>'}</div>
     <p class="w4c-verdict ${verdictClass}">${verdictText}</p>
     <div class="w4c-btns">
-      <button class="btn btn-ghost" onclick="handleWild4Accept()">Aceptar (robar 4)</button>
+      <button class="btn btn-ghost" onclick="handleWild4Accept()">Aceptar (tomar 4)</button>
       <button class="btn btn-secondary" onclick="handleWild4Challenge()">Desafiar</button>
     </div>
   `;
@@ -2832,7 +2839,7 @@ async function handleWild4Accept() {
   }
   players = players.map(p => ({ ...p, cardCount: (hands[p.id] || []).length }));
 
-  const log = addLog(state.log, `${ch.targetName} aceptó el +4 y robó 4 cartas.`);
+  const log = addLog(state.log, `${ch.targetName} aceptó el +4 y sacó 4 cartas.`);
   const update = {
     hands, players, drawPile,
     currentPlayerIndex: ch.nextPlayerIndex,
@@ -2868,7 +2875,7 @@ async function handleWild4Challenge() {
     drawPile = newDrawPile;
     hands = { ...hands, [localUid]: [...(hands[localUid] || []), ...drawn] };
     players = players.map(p => ({ ...p, cardCount: (hands[p.id] || []).length }));
-    log = addLog(log, `¡Desafío fallido! ${ch.chooserName} no tenía otras jugables. ${ch.targetName} roba 6 cartas y pierde su turno.`);
+    log = addLog(log, `¡Desafío fallido! ${ch.chooserName} no tenía otras jugables. ${ch.targetName} saca 6 cartas y pierde su turno.`);
     newCurrentPlayerIndex = ch.nextPlayerIndex;
   } else {
     // Challenge SUCCEEDED — Wild +4 was illegal. Chooser draws 4, color reverts, victim keeps turn.
@@ -2876,7 +2883,7 @@ async function handleWild4Challenge() {
     drawPile = newDrawPile;
     hands = { ...hands, [ch.chooserId]: [...(hands[ch.chooserId] || []), ...drawn] };
     players = players.map(p => ({ ...p, cardCount: (hands[p.id] || []).length }));
-    log = addLog(log, `¡Desafío exitoso! ${ch.chooserName} sí tenía cartas jugables. ${ch.chooserName} roba 4. El color vuelve a ${COLOR_NAME[ch.prevTopColor]}.`);
+    log = addLog(log, `¡Desafío exitoso! ${ch.chooserName} sí tenía cartas jugables. ${ch.chooserName} saca 4. El color vuelve a ${COLOR_NAME[ch.prevTopColor]}.`);
     newCurrentPlayerIndex = ch.targetIndex;
   }
 
@@ -3010,7 +3017,7 @@ async function playNormalCard(actualCard, cardIndex, chosenColor = null) {
     const { drawn, newDrawPile } = takeCards(drawPile, 2);
     drawPile = newDrawPile;
     newHands[drawTarget.id] = [...(newHands[drawTarget.id] || []), ...drawn];
-    log = addLog(log, `${drawTarget.name} roba 2 y pierde su turno.`);
+    log = addLog(log, `${drawTarget.name} saca 2 y pierde su turno.`);
     // Linked partner draws 2 too and loses their turn
     const linked2 = state.linkedPlayers;
     if (linked2?.includes(drawTarget.id)) {
@@ -3021,7 +3028,7 @@ async function playNormalCard(actualCard, cardIndex, chosenColor = null) {
         drawPile = npd2;
         newHands[partnerId2] = [...(newHands[partnerId2] || []), ...pd2];
         draw2LinkedPartnerId = partnerId2;
-        log = addLog(log, `${partner2.name} también roba 2 (enlazados).`);
+        log = addLog(log, `${partner2.name} también saca 2 (enlazados).`);
       }
     }
     players = players.map(p => ({ ...p, cardCount: (newHands[p.id] || []).length }));
@@ -3074,7 +3081,7 @@ function showDrawConfirm(accent, icon, title, message, okLabel, cancelLabel, thi
     const okBtn    = document.getElementById('draw-confirm-ok');
     const canBtn   = document.getElementById('draw-confirm-cancel');
     const thirdBtn = document.getElementById('draw-confirm-third');
-    okBtn.textContent  = okLabel     || 'Sí, robar';
+    okBtn.textContent  = okLabel     || 'Sí, tomar una';
     canBtn.textContent = cancelLabel || 'Cancelar';
     if (thirdLabel) {
       thirdBtn.textContent = thirdLabel;
@@ -3112,7 +3119,7 @@ async function handleDraw() {
     const ok = await showDrawConfirm(
       'white', '✋',
       'Tienes cartas jugables',
-      'Tienes cartas que puedes jugar. ¿Quieres robar de todas formas?'
+      'Tienes cartas que puedes jugar. ¿Quieres sacar una de todas formas?'
     );
     if (!ok) return;
   }
@@ -3149,7 +3156,7 @@ async function handleDraw() {
   if (drawLinkedPartnerId) {
     const partner = state.players.find(p => p.id === drawLinkedPartnerId);
     if (partner) {
-      log = addLog(log, `${partner.name} también roba 1 carta (enlazados).`);
+      log = addLog(log, `${partner.name} también saca 1 carta (enlazados).`);
     }
   }
 
@@ -3174,7 +3181,7 @@ async function handlePassTurn() {
   drawnCardState = null;
 
   const logMsg = hadDrawn
-    ? `${localName} robó una carta y pasó.`
+    ? `${localName} sacó una carta y pasó.`
     : `${localName} pasó su turno.`;
 
   await db.collection('rooms').doc(currentRoomId).update({
@@ -3241,7 +3248,7 @@ async function callUno() {
       p.id === target.id ? { ...p, cardCount: hands[p.id].length } : p
     );
     log = addLog(log,
-      `🚨 ${localName} atrapó a ${target.name} con una carta. ${target.name} roba 2 cartas.`
+      `🚨 ${localName} atrapó a ${target.name} con una carta. ${target.name} saca 2 cartas.`
     );
   }
 
@@ -4029,7 +4036,7 @@ async function botWild4ChallengeDecide(state) {
     drawPile = newDrawPile;
     hands = { ...hands, [ch.chooserId]: [...(hands[ch.chooserId] || []), ...drawn] };
     players = players.map(p => ({ ...p, cardCount: (hands[p.id] || []).length }));
-    log = addLog(log, `${botName} desafió el +4. ¡Desafío exitoso! ${ch.chooserName} roba 4. Color vuelve a ${COLOR_NAME[ch.prevTopColor]}.`);
+    log = addLog(log, `${botName} desafió el +4. ¡Desafío exitoso! ${ch.chooserName} saca 4. Color vuelve a ${COLOR_NAME[ch.prevTopColor]}.`);
     newCurrentPlayerIndex = ch.targetIndex;
     update.topColor = ch.prevTopColor;
     update.topValue = ch.prevTopValue;
@@ -4051,7 +4058,7 @@ async function botWild4ChallengeDecide(state) {
       }
     }
     players = players.map(p => ({ ...p, cardCount: (hands[p.id] || []).length }));
-    log = addLog(log, `${botName} aceptó el +4 y robó 4 cartas.`);
+    log = addLog(log, `${botName} aceptó el +4 y sacó 4 cartas.`);
     newCurrentPlayerIndex = ch.nextPlayerIndex;
     if (pendingSkips.length) update.pendingSkips = pendingSkips;
     else update.pendingSkips = firebase.firestore.FieldValue.delete();
@@ -4101,7 +4108,7 @@ async function botPointTakenVote(state, bots) {
       const { drawn, newDrawPile } = takeCards(drawPile, count);
       drawPile = newDrawPile;
       hands = { ...hands, [p.id]: [...(hands[p.id] || []), ...drawn] };
-      log = addLog(log, `${p.name} fue apuntado ${count} ${count === 1 ? 'vez' : 'veces'} → roba ${count}.`);
+      log = addLog(log, `${p.name} fue apuntado ${count} ${count === 1 ? 'vez' : 'veces'} → saca ${count}.`);
 
       if (linked?.includes(p.id)) {
         const partnerId = linked[0] === p.id ? linked[1] : linked[0];
@@ -4110,7 +4117,7 @@ async function botPointTakenVote(state, bots) {
           const { drawn: pd, newDrawPile: npd } = takeCards(drawPile, count);
           drawPile = npd;
           hands = { ...hands, [partnerId]: [...(hands[partnerId] || []), ...pd] };
-          log = addLog(log, `${partner.name} también roba ${count} (enlazados).`);
+          log = addLog(log, `${partner.name} también saca ${count} (enlazados).`);
         }
       }
     }
@@ -4158,7 +4165,7 @@ async function botWildPileUpAct(state, botId, botName) {
     if (linkedTakePartnerId) {
       const partner = state.players.find(p => p.id === linkedTakePartnerId);
       if (partner) {
-        log = addLog(log, `${partner.name} también roba ${pileCount} carta${pileCount === 1 ? '' : 's'} (enlazados).`);
+        log = addLog(log, `${partner.name} también saca ${pileCount} carta${pileCount === 1 ? '' : 's'} (enlazados).`);
       }
     }
     const update = {
@@ -4317,16 +4324,22 @@ async function botPlayCard(state, botId, botName, card, cardIdx) {
     const won = newHand.length === 0;
     let { drawPile } = state;
     const pile = [];
+    const discardedWilds = [];
     for (let attempts = 0; attempts < 10; attempts++) {
       const { drawn, newDrawPile } = takeCards(drawPile, 1);
       if (!drawn.length) break;
       drawPile = newDrawPile;
+      if (drawn[0].color === 'black') { discardedWilds.push(drawn[0]); continue; }
       pile.push(drawn[0]);
-      if (drawn[0].color !== 'black') break;
+      break;
     }
     const pileColor = pile.length ? pile[pile.length - 1].color : (state.topColor || 'red');
     const nextIdx = ((state.currentPlayerIndex + state.direction) % n + n) % n;
-    const log = addLog(state.log,
+    let log = state.log;
+    for (const dc of discardedWilds) {
+      log = addLog(log, `Se sacó ${WILD_LOG_NAME[dc.value] || 'Comodín'} del mazo: no es carta de color para la dinámica Pila Salvaje — fue descartada.`);
+    }
+    log = addLog(log,
       `${botName} jugó ⬆ Comodín Pila Salvaje. Mini-pila con ${pile.length} carta(s), color ${COLOR_NAME[pileColor]}.`
     );
 
@@ -4497,7 +4510,7 @@ async function botPlayCard(state, botId, botName, card, cardIdx) {
     const { drawn, newDrawPile } = takeCards(drawPile, 2);
     drawPile = newDrawPile;
     newHands[drawTarget.id] = [...(newHands[drawTarget.id] || []), ...drawn];
-    log = addLog(log, `${drawTarget.name} roba 2 y pierde su turno.`);
+    log = addLog(log, `${drawTarget.name} saca 2 y pierde su turno.`);
     const linked2 = state.linkedPlayers;
     if (linked2?.includes(drawTarget.id)) {
       const partnerId2 = linked2[0] === drawTarget.id ? linked2[1] : linked2[0];
@@ -4507,7 +4520,7 @@ async function botPlayCard(state, botId, botName, card, cardIdx) {
         drawPile = npd2;
         newHands[partnerId2] = [...(newHands[partnerId2] || []), ...pd2];
         draw2LinkedPartnerId = partnerId2;
-        log = addLog(log, `${partner2.name} también roba 2 (enlazados).`);
+        log = addLog(log, `${partner2.name} también saca 2 (enlazados).`);
       }
     }
     players = players.map(p => ({ ...p, cardCount: (newHands[p.id] || []).length }));
@@ -4558,10 +4571,10 @@ async function botDrawAndPass(state, botId, botName) {
   if (botDrawPartnerId) {
     const partner = state.players.find(p => p.id === botDrawPartnerId);
     if (partner) {
-      log = addLog(log, `${partner.name} también roba 1 carta (enlazados).`);
+      log = addLog(log, `${partner.name} también saca 1 carta (enlazados).`);
     }
   }
-  log = addLog(log, `${botName} robó una carta y pasó.`);
+  log = addLog(log, `${botName} sacó una carta y pasó.`);
   const botDrawUpdate = {
     hands: newHands, players, drawPile,
     currentPlayerIndex: nextPlayerIndex(state),

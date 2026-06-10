@@ -885,6 +885,53 @@ input[type=text]:focus { border-color: var(--blue); }
 .turn-actions { display: flex; justify-content: center; margin-top: .4rem; }
 #pass-btn { font-size: .8rem; padding: .35rem .9rem; }
 
+/* Wild +4 Challenge Area */
+.wild4-challenge-area {
+  position: fixed;
+  inset: 0;
+  background: rgba(0,0,0,.78);
+  display: flex;
+  align-items: flex-end;
+  z-index: 100;
+}
+.wild4-challenge-area.hidden { display: none; }
+.w4c-inner {
+  background: var(--surface);
+  border-top: 2px solid #c0186c;
+  border-radius: 16px 16px 0 0;
+  padding: 1.2rem 1rem 1.5rem;
+  width: 100%;
+  max-height: 88vh;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: .85rem;
+}
+.w4c-title { font-size: 1rem; font-weight: 700; color: var(--text); }
+.w4c-subtitle { font-size: .82rem; color: var(--muted); }
+.w4c-verdict { font-size: .92rem; font-weight: 600; padding: .5rem .75rem; border-radius: 8px; background: var(--bg); }
+.w4c-verdict.invalid { color: #f87171; }
+.w4c-verdict.valid   { color: #4ade80; }
+.w4c-wait { color: var(--muted); font-size: .9rem; text-align: center; padding: 1rem 0; }
+.w4c-hand {
+  display: flex;
+  flex-wrap: wrap;
+  gap: .35rem;
+  justify-content: center;
+  padding: .25rem 0;
+}
+.w4c-hand .card {
+  zoom: 0.63;
+  flex-shrink: 0;
+}
+.w4c-hand .card.w4c-playable {
+  box-shadow: 0 0 0 2.5px #22c55e, 0 0 8px #22c55e88;
+  opacity: 1;
+}
+.w4c-hand .card.w4c-dim { opacity: .35; }
+.w4c-btns { display: flex; gap: .75rem; }
+.w4c-btns .btn { flex: 1; }
+
 /* Claim dialog */
 .claim-dialog {
   position: fixed;
@@ -926,18 +973,6 @@ input[type=text]:focus { border-color: var(--blue); }
 .color-btn.blue   { background: var(--blue); }
 .color-btn.selected { border-color: #fff; transform: scale(1.15); }
 
-.value-btn {
-  padding: .35rem .6rem;
-  background: var(--bg);
-  border: 1px solid var(--border);
-  border-radius: 6px;
-  color: var(--text);
-  font-size: .8rem;
-  font-weight: 600;
-  cursor: pointer;
-  transition: background .1s;
-}
-.value-btn.selected { background: #c0186c; border-color: #c0186c; color: #fff; }
 
 .claim-btns { display: flex; gap: .75rem; }
 .claim-btns .btn { flex: 1; }
@@ -1081,7 +1116,7 @@ input[type=text]:focus { border-color: var(--blue); }
 /* ---- MOBILE / TOUCH ---- */
 
 /* Eliminate 300ms tap delay */
-button, .card, .color-btn, .value-btn, .btn-copy, .draw-pile .card-back {
+button, .card, .color-btn, .btn-copy, .draw-pile .card-back {
   touch-action: manipulation;
 }
 

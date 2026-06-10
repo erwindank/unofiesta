@@ -833,12 +833,12 @@ function onRoomUpdate(state) {
     // Auto-skip disconnected players' turns (any client can trigger; same result from all)
     const currentPlayer = state.players[state.currentPlayerIndex];
     const activePlayers = state.players.filter(p => !p.disconnected);
-    if (currentPlayer?.disconnected && activePlayers.length > 0) {
+    if (currentPlayer?.disconnected && activePlayers.length > 0 && !state.wild4Challenge) {
       skipDisconnectedTurn(state);
     }
     // Auto-skip linked partners who drew cards and lost their turn
     if (state.pendingSkips?.includes(currentPlayer?.id) && !currentPlayer?.disconnected &&
-        !state.pointTakenPhase && !state.wildPileUpPhase) {
+        !state.wild4Challenge && !state.pointTakenPhase && !state.wildPileUpPhase) {
       skipLinkedTurn(state);
     }
     showScreen('game');
@@ -987,6 +987,7 @@ function renderGame(state) {
   renderPointTakenOverlay(state);
   renderWildPileUpPanel(state);
   renderDrawnTogetherDialog(state);
+  renderWild4ChallengeArea(state);
   renderChatPanel(state);
   renderSpeechBubbles(state);
 
@@ -1209,7 +1210,7 @@ function renderHand(state) {
 
   // Speed play: cards clickable out of turn when they match both color+value
   const canSpeedPlay = !myTurn && !pilePhase &&
-    !state.pointTakenPhase;
+    !state.pointTakenPhase && !state.wild4Challenge;
 
   handEl.innerHTML = myHand.map((card, i) => {
     let isPlayable, onclick, extraClass = '';
@@ -2163,6 +2164,7 @@ function checkNotifications(state) {
 
 async function selectCard(index) {
   if (!roomState) return;
+  if (roomState.wild4Challenge) return;  // blocked during challenge phase
   const myHand = roomState.hands?.[localUid] || [];
   const card = myHand[index];
   if (!card) return;
@@ -2276,7 +2278,11 @@ async function confirmPlay() {
   if (!actualCard) return;
 
   document.getElementById('claim-dialog').classList.add('hidden');
-  await playNormalCard(actualCard, selectedCardIdx, claimColor);
+  if (actualCard.value === 'wild4' || actualCard.value === 'wildc4Plus') {
+    await startWild4Challenge(actualCard, claimColor, selectedCardIdx);
+  } else {
+    await playNormalCard(actualCard, selectedCardIdx, claimColor);
+  }
 
   selectedCardIdx = null;
   selectedActualCard = null;
@@ -2699,6 +2705,195 @@ async function startWildDrawnTogether(cardIndex, linkedIds, chosenColor) {
 }
 
 
+function renderWild4ChallengeArea(state) {
+  const el = document.getElementById('wild4-challenge-area');
+  const ch = state.wild4Challenge;
+  if (!ch) { el.classList.add('hidden'); return; }
+  el.classList.remove('hidden');
+
+  const content = document.getElementById('w4c-content');
+  const amVictim  = ch.targetId  === localUid;
+  const amChooser = ch.chooserId === localUid;
+
+  if (!amVictim && !amChooser) {
+    content.innerHTML = `<p class="w4c-wait">⏳ ${ch.targetName} está decidiendo sobre el +4 de ${ch.chooserName}…</p>`;
+    return;
+  }
+  if (amChooser && !amVictim) {
+    content.innerHTML = `<p class="w4c-wait">⏳ ${ch.targetName} está revisando tu mano y decidiendo si desafiar…</p>`;
+    return;
+  }
+
+  // Victim UI — show chooser's hand with playable alternatives highlighted
+  const hand = ch.chooserHandAtPlay || [];
+  const handHTML = hand.map(card => {
+    const playable = WILDS.includes(card.value) ||
+      card.color === ch.prevTopColor || card.value === ch.prevTopValue;
+    const lbl = VALUE_LABEL[card.value];
+    const isWild = WILDS.includes(card.value);
+    const center = isWild ? wildCenterHTML(card.value)
+      : card.value === 'reverse' ? reverseCenterHTML()
+      : `<span class="card-label center">${lbl}</span>`;
+    return `<div class="card ${card.color} ${playable ? 'w4c-playable' : 'w4c-dim'}">
+      ${cornerLabelHTML(card.value, 'tl')}${center}${cornerLabelHTML(card.value, 'br')}
+    </div>`;
+  }).join('');
+
+  const altCount = hand.filter(c =>
+    WILDS.includes(c.value) || c.color === ch.prevTopColor || c.value === ch.prevTopValue
+  ).length;
+
+  const prevColorName = COLOR_NAME[ch.prevTopColor] || ch.prevTopColor;
+  const verdictClass = altCount > 0 ? 'invalid' : 'valid';
+  const verdictText  = altCount > 0
+    ? `⚠️ ${ch.chooserName} tenía ${altCount} carta${altCount > 1 ? 's' : ''} jugable${altCount > 1 ? 's' : ''} (${prevColorName} u otra coincidencia). El +4 era <strong>inválido</strong>.`
+    : `✅ ${ch.chooserName} no tenía ninguna carta jugable. El +4 era <strong>válido</strong>.`;
+
+  content.innerHTML = `
+    <p class="w4c-title">🃏 Mano de ${ch.chooserName} al jugar el +4 — color era ${prevColorName}:</p>
+    <div class="w4c-hand">${handHTML || '<em style="color:var(--muted)">Mano vacía</em>'}</div>
+    <p class="w4c-verdict ${verdictClass}">${verdictText}</p>
+    <div class="w4c-btns">
+      <button class="btn btn-ghost" onclick="handleWild4Accept()">Aceptar (robar 4)</button>
+      <button class="btn btn-secondary" onclick="handleWild4Challenge()">Desafiar</button>
+    </div>
+  `;
+}
+
+// ============================================================
+// WILD +4 CHALLENGE
+// ============================================================
+
+async function startWild4Challenge(actualCard, chosenColor, cardIndex) {
+  const state = roomState;
+  const myHand = [...(state.hands?.[localUid] || [])];
+  const newHand = myHand.filter((_, i) => i !== cardIndex);
+  const newHands = { ...state.hands, [localUid]: newHand };
+  const players = state.players.map(p =>
+    p.id === localUid ? { ...p, cardCount: newHand.length } : p
+  );
+  const n = state.players.length;
+  const nextActive = (fromIdx, dir) => {
+    let idx = ((fromIdx + dir) % n + n) % n;
+    for (let i = 0; i < n && state.players[idx]?.disconnected; i++) idx = ((idx + dir) % n + n) % n;
+    return idx;
+  };
+  const targetIdx  = nextActive(state.currentPlayerIndex, state.direction);
+  const target     = state.players[targetIdx];
+  const nextAfterTarget = nextActive(targetIdx, state.direction);
+  const won = newHand.length === 0;
+
+  const log = addLog(state.log,
+    `${localName} jugó +4 y eligió ${COLOR_NAME[chosenColor]}. ${target?.name || '?'} puede aceptar o desafiar.`
+  );
+  const update = {
+    players, hands: newHands,
+    topColor: chosenColor, topValue: actualCard.value,
+    currentPlayerIndex: targetIdx,
+    log, lastActivity: firebase.firestore.FieldValue.serverTimestamp()
+  };
+  if (won) {
+    update.status = 'ended'; update.winner = localUid; update.winnerName = localName;
+    await db.collection('rooms').doc(currentRoomId).update(update);
+    return;
+  }
+  update.wild4Challenge = {
+    chooserId: localUid, chooserName: localName,
+    chooserHandAtPlay: newHand,   // hand after removing the Wild +4 — shows alternatives
+    targetId: target?.id, targetName: target?.name, targetIndex: targetIdx,
+    chosenColor, prevTopColor: state.topColor, prevTopValue: state.topValue,
+    nextPlayerIndex: nextAfterTarget
+  };
+  await db.collection('rooms').doc(currentRoomId).update(update);
+}
+
+async function handleWild4Accept() {
+  const state = roomState;
+  const ch = state.wild4Challenge;
+  if (!ch || ch.targetId !== localUid) return;
+
+  let { hands, players, drawPile } = state;
+  const { drawn, newDrawPile } = takeCards(drawPile, 4);
+  drawPile = newDrawPile;
+  hands = { ...hands, [localUid]: [...(hands[localUid] || []), ...drawn] };
+
+  // Linked partner also draws 4 and skips
+  let pendingSkips = state.pendingSkips ? [...state.pendingSkips] : [];
+  const linked = state.linkedPlayers;
+  if (linked?.includes(localUid)) {
+    const partnerId = linked[0] === localUid ? linked[1] : linked[0];
+    const partner = state.players.find(p => p.id === partnerId && !p.disconnected);
+    if (partner) {
+      const { drawn: pd, newDrawPile: npd } = takeCards(drawPile, 4);
+      drawPile = npd;
+      hands = { ...hands, [partnerId]: [...(hands[partnerId] || []), ...pd] };
+      if (!pendingSkips.includes(partnerId)) pendingSkips.push(partnerId);
+    }
+  }
+  players = players.map(p => ({ ...p, cardCount: (hands[p.id] || []).length }));
+
+  const log = addLog(state.log, `${ch.targetName} aceptó el +4 y robó 4 cartas.`);
+  const update = {
+    hands, players, drawPile,
+    currentPlayerIndex: ch.nextPlayerIndex,
+    wild4Challenge: firebase.firestore.FieldValue.delete(),
+    log, lastActivity: firebase.firestore.FieldValue.serverTimestamp()
+  };
+  if (pendingSkips.length) update.pendingSkips = pendingSkips;
+  else update.pendingSkips = firebase.firestore.FieldValue.delete();
+  await db.collection('rooms').doc(currentRoomId).update(update);
+}
+
+async function handleWild4Challenge() {
+  const state = roomState;
+  const ch = state.wild4Challenge;
+  if (!ch || ch.targetId !== localUid) return;
+
+  // A card is a valid alternative if it matches the prev top color or value (non-wild),
+  // OR is a plain wild (always playable). Wild +4 itself is already gone from the hand.
+  const alternatives = (ch.chooserHandAtPlay || []).filter(c =>
+    WILDS.includes(c.value) ||
+    c.color === ch.prevTopColor ||
+    c.value === ch.prevTopValue
+  );
+  const wasValid = alternatives.length === 0;
+
+  let { hands, players, drawPile } = state;
+  let log = state.log;
+  let newCurrentPlayerIndex;
+
+  if (wasValid) {
+    // Challenge FAILED — Wild +4 was legitimate. Challenger draws 6.
+    const { drawn, newDrawPile } = takeCards(drawPile, 6);
+    drawPile = newDrawPile;
+    hands = { ...hands, [localUid]: [...(hands[localUid] || []), ...drawn] };
+    players = players.map(p => ({ ...p, cardCount: (hands[p.id] || []).length }));
+    log = addLog(log, `¡Desafío fallido! ${ch.chooserName} no tenía otras jugables. ${ch.targetName} roba 6 cartas y pierde su turno.`);
+    newCurrentPlayerIndex = ch.nextPlayerIndex;
+  } else {
+    // Challenge SUCCEEDED — Wild +4 was illegal. Chooser draws 4, color reverts, victim keeps turn.
+    const { drawn, newDrawPile } = takeCards(drawPile, 4);
+    drawPile = newDrawPile;
+    hands = { ...hands, [ch.chooserId]: [...(hands[ch.chooserId] || []), ...drawn] };
+    players = players.map(p => ({ ...p, cardCount: (hands[p.id] || []).length }));
+    log = addLog(log, `¡Desafío exitoso! ${ch.chooserName} sí tenía cartas jugables. ${ch.chooserName} roba 4. El color vuelve a ${COLOR_NAME[ch.prevTopColor]}.`);
+    newCurrentPlayerIndex = ch.targetIndex;
+  }
+
+  const update = {
+    hands, players, drawPile,
+    currentPlayerIndex: newCurrentPlayerIndex,
+    wild4Challenge: firebase.firestore.FieldValue.delete(),
+    log, lastActivity: firebase.firestore.FieldValue.serverTimestamp()
+  };
+  if (!wasValid) {
+    // Revert color since the Wild +4 was illegal
+    update.topColor = ch.prevTopColor;
+    update.topValue = ch.prevTopValue;
+  }
+  await db.collection('rooms').doc(currentRoomId).update(update);
+}
+
 // ============================================================
 // SPEED PLAY
 // ============================================================
@@ -2777,7 +2972,6 @@ async function playNormalCard(actualCard, cardIndex, chosenColor = null) {
   const nextIdx = nextActive(state.currentPlayerIndex, direction);
   let newCurrentPlayerIndex = nextIdx;
   let draw2LinkedPartnerId = null;
-  let wild4LinkedPartnerId = null;
   let skipLinkedPartnerId = null;
 
   const getLinkedPartner = (targetId) => {
@@ -2832,27 +3026,6 @@ async function playNormalCard(actualCard, cardIndex, chosenColor = null) {
     }
     players = players.map(p => ({ ...p, cardCount: (newHands[p.id] || []).length }));
     newCurrentPlayerIndex = nextActive(nextIdx, direction);
-  } else if (actualCard.value === 'wild4' || actualCard.value === 'wildc4Plus') {
-    topColor = chosenColor || 'red';
-    const drawTarget = state.players[nextIdx];
-    const { drawn: w4drawn, newDrawPile: w4pile } = takeCards(drawPile, 4);
-    drawPile = w4pile;
-    newHands[drawTarget.id] = [...(newHands[drawTarget.id] || []), ...w4drawn];
-    log = addLog(log, `${drawTarget.name} roba 4 y pierde su turno.`);
-    const linked4 = state.linkedPlayers;
-    if (linked4?.includes(drawTarget.id)) {
-      const partnerId4 = linked4[0] === drawTarget.id ? linked4[1] : linked4[0];
-      const partner4 = state.players.find(p => p.id === partnerId4 && !p.disconnected);
-      if (partner4) {
-        const { drawn: pd4, newDrawPile: npd4 } = takeCards(drawPile, 4);
-        drawPile = npd4;
-        newHands[partnerId4] = [...(newHands[partnerId4] || []), ...pd4];
-        wild4LinkedPartnerId = partnerId4;
-        log = addLog(log, `${partner4.name} también roba 4 (enlazados).`);
-      }
-    }
-    players = players.map(p => ({ ...p, cardCount: (newHands[p.id] || []).length }));
-    newCurrentPlayerIndex = nextActive(nextIdx, direction);
   }
 
   const update = {
@@ -2867,7 +3040,7 @@ async function playNormalCard(actualCard, cardIndex, chosenColor = null) {
     lastActivity: firebase.firestore.FieldValue.serverTimestamp()
   };
 
-  const partnersToSkip = [draw2LinkedPartnerId, wild4LinkedPartnerId, skipLinkedPartnerId].filter(Boolean);
+  const partnersToSkip = [draw2LinkedPartnerId, skipLinkedPartnerId].filter(Boolean);
   if (partnersToSkip.length) {
     update.pendingSkips = [...new Set([...(state.pendingSkips || []), ...partnersToSkip])];
   }
@@ -2929,6 +3102,7 @@ function showDrawConfirm(accent, icon, title, message, okLabel, cancelLabel, thi
 async function handleDraw() {
   const state = roomState;
   if (!isMyTurn(state)) return;
+  if (state.wild4Challenge) return;
   if (drawnCardState !== null) return;
 
   const myHand = state.hands?.[localUid] || [];
@@ -3808,6 +3982,12 @@ async function runBotTick(state) {
     if (bots.length > 0) { await botPointTakenVote(state, bots); return; }
   }
 
+  // 5. Wild +4 challenge — bot is the victim deciding
+  if (state.wild4Challenge && isBot(state.wild4Challenge.targetId)) {
+    await botWild4ChallengeDecide(state);
+    return;
+  }
+
   // 6. Wild pile up — only the holder acts; all other bot turns are blocked
   if (state.wildPileUpPhase) {
     const holder = state.players[state.wildPileUpPhase.holderIndex];
@@ -3821,6 +4001,65 @@ async function runBotTick(state) {
   const current = state.players[state.currentPlayerIndex];
   if (current && isBot(current.id) && !current.disconnected) {
     await botDoTurn(state, current.id, current.name);
+  }
+}
+
+// ----- Bot: Wild +4 challenge decision -----
+
+async function botWild4ChallengeDecide(state) {
+  const ch = state.wild4Challenge;
+  if (!ch) return;
+  const botId   = ch.targetId;
+  const botName = ch.targetName;
+
+  const alternatives = (ch.chooserHandAtPlay || []).filter(c =>
+    WILDS.includes(c.value) || c.color === ch.prevTopColor || c.value === ch.prevTopValue
+  );
+  const challengeWins = alternatives.length > 0;
+
+  let { hands, players, drawPile } = state;
+  let log = state.log;
+  let newCurrentPlayerIndex;
+  const update = { wild4Challenge: firebase.firestore.FieldValue.delete(),
+    lastActivity: firebase.firestore.FieldValue.serverTimestamp() };
+
+  if (challengeWins) {
+    // Bot challenges (knows the play was invalid)
+    const { drawn, newDrawPile } = takeCards(drawPile, 4);
+    drawPile = newDrawPile;
+    hands = { ...hands, [ch.chooserId]: [...(hands[ch.chooserId] || []), ...drawn] };
+    players = players.map(p => ({ ...p, cardCount: (hands[p.id] || []).length }));
+    log = addLog(log, `${botName} desafió el +4. ¡Desafío exitoso! ${ch.chooserName} roba 4. Color vuelve a ${COLOR_NAME[ch.prevTopColor]}.`);
+    newCurrentPlayerIndex = ch.targetIndex;
+    update.topColor = ch.prevTopColor;
+    update.topValue = ch.prevTopValue;
+  } else {
+    // Bot accepts
+    const { drawn, newDrawPile } = takeCards(drawPile, 4);
+    drawPile = newDrawPile;
+    hands = { ...hands, [botId]: [...(hands[botId] || []), ...drawn] };
+    let pendingSkips = state.pendingSkips ? [...state.pendingSkips] : [];
+    const linked = state.linkedPlayers;
+    if (linked?.includes(botId)) {
+      const partnerId = linked[0] === botId ? linked[1] : linked[0];
+      const partner = state.players.find(p => p.id === partnerId && !p.disconnected);
+      if (partner) {
+        const { drawn: pd, newDrawPile: npd } = takeCards(drawPile, 4);
+        drawPile = npd;
+        hands = { ...hands, [partnerId]: [...(hands[partnerId] || []), ...pd] };
+        if (!pendingSkips.includes(partnerId)) pendingSkips.push(partnerId);
+      }
+    }
+    players = players.map(p => ({ ...p, cardCount: (hands[p.id] || []).length }));
+    log = addLog(log, `${botName} aceptó el +4 y robó 4 cartas.`);
+    newCurrentPlayerIndex = ch.nextPlayerIndex;
+    if (pendingSkips.length) update.pendingSkips = pendingSkips;
+    else update.pendingSkips = firebase.firestore.FieldValue.delete();
+  }
+
+  Object.assign(update, { hands, players, drawPile, currentPlayerIndex: newCurrentPlayerIndex, log });
+  await db.collection('rooms').doc(currentRoomId).update(update);
+}
 
 // ----- Bot: point taken vote -----
 
@@ -4028,48 +4267,43 @@ async function botPlayCard(state, botId, botName, card, cardIdx) {
     return;
   }
 
-  // Wild4 / wildc4Plus → draw 4 for next player and advance
+  // Wild4 / wildc4Plus → set up challenge for next player (same flow as human)
   if (card.value === 'wild4' || card.value === 'wildc4Plus') {
     const color = botPickColor(myHand);
     const newHands = { ...state.hands, [botId]: newHand };
-    const targetIdx = ((state.currentPlayerIndex + state.direction) % n + n) % n;
-    const drawTarget = state.players[targetIdx];
-    let { drawPile } = state;
-    const { drawn, newDrawPile } = takeCards(drawPile, 4);
-    drawPile = newDrawPile;
-    newHands[drawTarget.id] = [...(newHands[drawTarget.id] || []), ...drawn];
-    let log = addLog(state.log,
-      `${botName} jugó +4 y eligió ${COLOR_NAME[color]}. ${drawTarget?.name || '?'} roba 4 y pierde su turno.`
+    const players  = state.players.map(p => p.id === botId ? { ...p, cardCount: newHand.length } : p);
+    const nextActive = (fromIdx, dir) => {
+      let idx = ((fromIdx + dir) % n + n) % n;
+      for (let i = 0; i < n && state.players[idx]?.disconnected; i++) idx = ((idx + dir) % n + n) % n;
+      return idx;
+    };
+    const targetIdx  = nextActive(state.currentPlayerIndex, state.direction);
+    const target     = state.players[targetIdx];
+    const nextAfterTarget = nextActive(targetIdx, state.direction);
+    const log = addLog(state.log,
+      `${botName} jugó +4 y eligió ${COLOR_NAME[color]}. ${target?.name || '?'} puede aceptar o desafiar.`
     );
-    const linked = state.linkedPlayers;
-    let pendingSkipsW4 = state.pendingSkips ? [...state.pendingSkips] : [];
-    if (linked?.includes(drawTarget.id)) {
-      const partnerId = linked[0] === drawTarget.id ? linked[1] : linked[0];
-      const partner = state.players.find(p => p.id === partnerId && !p.disconnected);
-      if (partner) {
-        const { drawn: pd, newDrawPile: npd } = takeCards(drawPile, 4);
-        drawPile = npd;
-        newHands[partnerId] = [...(newHands[partnerId] || []), ...pd];
-        if (!pendingSkipsW4.includes(partnerId)) pendingSkipsW4.push(partnerId);
-        log = addLog(log, `${partner.name} también roba 4 (enlazados).`);
-      }
-    }
-    const nextPlayerIdx = ((targetIdx + state.direction) % n + n) % n;
-    let players = state.players.map(p => ({ ...p, cardCount: (newHands[p.id] || []).length }));
     const update = {
-      players, hands: newHands, drawPile,
-      topColor: color, topValue: 'wild4',
-      currentPlayerIndex: nextPlayerIdx,
-      unoCallRequired: newHand.length === 1
-        ? { playerId: botId, playerName: botName }
-        : firebase.firestore.FieldValue.delete(),
+      players, hands: newHands,
+      topColor: color, topValue: card.value,
+      currentPlayerIndex: targetIdx,
       log, lastActivity: firebase.firestore.FieldValue.serverTimestamp()
     };
-    update.pendingSkips = pendingSkipsW4.length > 0 ? pendingSkipsW4 : firebase.firestore.FieldValue.delete();
     update.unoCallRequired = (!won && newHand.length === 1)
       ? { playerId: botId, playerName: botName }
       : firebase.firestore.FieldValue.delete();
-    if (won) { update.status = 'ended'; update.winner = botId; update.winnerName = botName; }
+    if (won) {
+      update.status = 'ended'; update.winner = botId; update.winnerName = botName;
+      await db.collection('rooms').doc(currentRoomId).update(update);
+      return;
+    }
+    update.wild4Challenge = {
+      chooserId: botId, chooserName: botName,
+      chooserHandAtPlay: newHand,
+      targetId: target?.id, targetName: target?.name, targetIndex: targetIdx,
+      chosenColor: color, prevTopColor: state.topColor, prevTopValue: state.topValue,
+      nextPlayerIndex: nextAfterTarget
+    };
     await db.collection('rooms').doc(currentRoomId).update(update);
     return;
   }

@@ -795,7 +795,7 @@ input[type=text]:focus { border-color: var(--blue); }
 /* Game log */
 .game-log {
   padding: .5rem .75rem;
-  height: 22rem;
+  height: 44rem;
   overflow-y: auto;
   overflow-x: hidden;
   display: flex;

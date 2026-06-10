@@ -300,6 +300,13 @@ const LOG_VALUE_PAT = '[0-9⊘↺C]|\\+[24]';
 
 function colorizeLog(msg) {
   let s = esc(msg);
+  s = s.replace(/Comodín Pila Salvaje/g, () => {
+    let ci = 0;
+    return 'Comodín Pila Salvaje'.split('').map(ch => {
+      if (ch === ' ') return ' ';
+      return `<span style="color:${LOG_WILD_COLORS[ci++ % 4]};font-weight:700">${ch}</span>`;
+    }).join('');
+  });
   s = s.replace(new RegExp(`Comodín(?:\\s+(${LOG_VALUE_PAT}))?`, 'g'), (_, val) => {
     const rain = 'Comodín'.split('').map((ch, i) =>
       `<span style="color:${LOG_WILD_COLORS[i % 4]};font-weight:700">${ch}</span>`
@@ -2568,47 +2575,21 @@ async function handleTakePile() {
   const myHand = state.hands?.[localUid] || [];
   newHands[localUid] = [...myHand, ...phase.pile];
 
-  let drawPile = state.drawPile;
-  const pileCount = phase.pile.length;
-  const linked = state.linkedPlayers;
-  let linkedTakePartnerId = null;
-  if (linked?.includes(localUid)) {
-    const partnerId = linked[0] === localUid ? linked[1] : linked[0];
-    const partner = state.players.find(p => p.id === partnerId && !p.disconnected);
-    if (partner && pileCount > 0) {
-      const { drawn: pd, newDrawPile: npd } = takeCards(drawPile, pileCount);
-      drawPile = npd;
-      newHands[partnerId] = [...(newHands[partnerId] || []), ...pd];
-      linkedTakePartnerId = partnerId;
-    }
-  }
-
+  const drawPile = state.drawPile;
   players = players.map(p => ({ ...p, cardCount: (newHands[p.id] || []).length }));
   const n = players.length;
   const afterIdx = ((phase.holderIndex + state.direction) % n + n) % n;
-  let log = addLog(state.log,
+  const log = addLog(state.log,
     `${localName} toma la mini-pila (${phase.pile.length} cartas). El color que continúa es ${COLOR_NAME[phase.pileColor]}.`
   );
-  if (linkedTakePartnerId) {
-    const partner = state.players.find(p => p.id === linkedTakePartnerId);
-    if (partner) {
-      log = addLog(log, `${partner.name} también saca ${pileCount} carta${pileCount === 1 ? '' : 's'} (enlazados).`);
-    }
-  }
 
   const update = {
-    hands: newHands, players,
+    hands: newHands, players, drawPile,
     topColor: phase.pileColor, topValue: 'wildPileUp',
     wildPileUpPhase: firebase.firestore.FieldValue.delete(),
     currentPlayerIndex: afterIdx,
     log, lastActivity: firebase.firestore.FieldValue.serverTimestamp()
   };
-  if (linkedTakePartnerId) {
-    update.pendingSkips = [...new Set([...(state.pendingSkips || []), linkedTakePartnerId])];
-    update.drawPile = drawPile;
-  } else {
-    update.drawPile = drawPile;
-  }
 
   await db.collection('rooms').doc(currentRoomId).update(update);
 }
@@ -4225,46 +4206,21 @@ async function botWildPileUpAct(state, botId, botName) {
 
   if (matchIdx === -1) {
     // Take the pile
-    let newHands = { ...state.hands, [botId]: [...myHand, ...phase.pile] };
-    let players = state.players.map(p => ({ ...p, cardCount: (newHands[p.id] || []).length }));
-    let drawPile = state.drawPile;
-    const pileCount = phase.pile.length;
-    const linked = state.linkedPlayers;
-    let linkedTakePartnerId = null;
-    if (linked?.includes(botId)) {
-      const partnerId = linked[0] === botId ? linked[1] : linked[0];
-      const partner = state.players.find(p => p.id === partnerId && !p.disconnected);
-      if (partner && pileCount > 0) {
-        const { drawn: pd, newDrawPile: npd } = takeCards(drawPile, pileCount);
-        drawPile = npd;
-        newHands[partnerId] = [...(newHands[partnerId] || []), ...pd];
-        players = state.players.map(p => ({ ...p, cardCount: (newHands[p.id] || []).length }));
-        linkedTakePartnerId = partnerId;
-      }
-    }
+    const newHands = { ...state.hands, [botId]: [...myHand, ...phase.pile] };
+    const players = state.players.map(p => ({ ...p, cardCount: (newHands[p.id] || []).length }));
     const n = players.length;
     const afterIdx = ((phase.holderIndex + state.direction) % n + n) % n;
-    let log = addLog(state.log,
+    const log = addLog(state.log,
       `${botName} toma la mini-pila (${phase.pile.length} cartas). El color que continúa es ${COLOR_NAME[phase.pileColor]}.`
     );
-    if (linkedTakePartnerId) {
-      const partner = state.players.find(p => p.id === linkedTakePartnerId);
-      if (partner) {
-        log = addLog(log, `${partner.name} también saca ${pileCount} carta${pileCount === 1 ? '' : 's'} (enlazados).`);
-      }
-    }
-    const update = {
+    await db.collection('rooms').doc(currentRoomId).update({
       hands: newHands, players,
       topColor: phase.pileColor, topValue: 'wildPileUp',
       wildPileUpPhase: firebase.firestore.FieldValue.delete(),
       currentPlayerIndex: afterIdx,
       log, lastActivity: firebase.firestore.FieldValue.serverTimestamp(),
-      drawPile
-    };
-    if (linkedTakePartnerId) {
-      update.pendingSkips = [...new Set([...(state.pendingSkips || []), linkedTakePartnerId])];
-    }
-    await db.collection('rooms').doc(currentRoomId).update(update);
+      drawPile: state.drawPile
+    });
     return;
   }
 

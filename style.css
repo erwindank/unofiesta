@@ -1197,6 +1197,15 @@ button, .card, .color-btn, .btn-copy, .draw-pile .card-back {
   .draw-pile .card-back, #top-card { width: 54px; height: 81px; }
 }
 
+/* Mobile topbar: tighten buttons so all fit, now-playing on its own row */
+@media (max-width: 480px) {
+  .game-topbar { flex-wrap: wrap; row-gap: .15rem; }
+  .game-topbar-actions { gap: .2rem; }
+  .game-topbar .btn-sm { padding: .15rem .3rem; font-size: .7rem; min-height: 24px; }
+  .game-topbar .game-room-code { padding: .15rem .3rem; letter-spacing: 1px; font-size: .68rem; }
+  .now-playing-carousel { order: 10; flex: 1 0 100%; max-width: 100%; }
+}
+
 /* Narrower phones: slightly smaller cards in hand */
 @media (max-width: 360px) {
   .player-hand .card        { width: 50px; height: 75px; }

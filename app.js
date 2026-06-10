@@ -656,6 +656,7 @@ function setupPresence(roomId) {
 
     for (const player of roomState.players) {
       if (player.id === localUid) continue;
+      if (isBot(player.id)) continue; // bots have no RTDB presence — never treat as disconnected
 
       if (!present[player.id]) {
         if (!disconnectTimers[player.id]) {
@@ -4219,6 +4220,16 @@ let botTickRunning = false;
 function scheduleBotTick(state) {
   if (!state || state.hostId !== localUid) return;
   if (!state.players.some(p => isBot(p.id))) return;
+
+  // Revive any bots that were incorrectly marked disconnected
+  const stuckBots = state.players.filter(p => isBot(p.id) && p.disconnected);
+  if (stuckBots.length > 0) {
+    const newPlayers = state.players.map(p =>
+      isBot(p.id) && p.disconnected ? { ...p, disconnected: false } : p
+    );
+    db.collection('rooms').doc(currentRoomId).update({ players: newPlayers }).catch(() => {});
+  }
+
   clearTimeout(botTickTimer);
   const delay = 900 + Math.random() * 600;
   botTickTimer = setTimeout(() => doBotTick(roomState || state), delay);

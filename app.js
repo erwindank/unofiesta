@@ -4023,6 +4023,39 @@ async function doBotTick(state) {
 }
 
 async function runBotTick(state) {
+  // Bots opportunistically catch players who forgot to say UNO (~40% chance per tick)
+  if (state.unoCallRequired && Math.random() < 0.4) {
+    const req = state.unoCallRequired;
+    const catchers = state.players.filter(p => isBot(p.id) && p.id !== req.playerId && !p.disconnected);
+    if (catchers.length > 0) {
+      const catcher = catchers[Math.floor(Math.random() * catchers.length)];
+      const roomRef = db.collection('rooms').doc(currentRoomId);
+      await db.runTransaction(async (transaction) => {
+        const doc = await transaction.get(roomRef);
+        const cur = doc.data();
+        if (!cur.unoCallRequired || cur.unoCallRequired.playerId !== req.playerId) return;
+        const target = cur.players.find(p => p.id === req.playerId);
+        if (!target || target.cardCount !== 1) return;
+        let { hands, players, drawPile } = cur;
+        const { drawn, newDrawPile } = takeCards(drawPile, 2);
+        hands = { ...hands, [req.playerId]: [...(hands[req.playerId] || []), ...drawn] };
+        players = players.map(p =>
+          p.id === req.playerId ? { ...p, cardCount: hands[p.id].length } : p
+        );
+        const log = addLog(cur.log,
+          `🚨 ${catcher.name} le gritó UNO a ${req.playerName}. ${req.playerName} saca 2 cartas.`
+        );
+        transaction.update(roomRef, {
+          hands, players, drawPile: newDrawPile,
+          unoCallRequired: firebase.firestore.FieldValue.delete(),
+          log,
+          lastActivity: firebase.firestore.FieldValue.serverTimestamp()
+        });
+      });
+      return;
+    }
+  }
+
   // 3. Point taken phase: bots vote
   if (state.pointTakenPhase) {
     const bots = state.players.filter(p =>

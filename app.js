@@ -1156,16 +1156,25 @@ async function handleUnoCallBtn() {
       let { hands, players, drawPile } = state;
       const { drawn, newDrawPile } = takeCards(drawPile, 2);
       hands   = { ...hands, [req.playerId]: [...(hands[req.playerId] || []), ...drawn] };
-      players = players.map(p =>
-        p.id === req.playerId ? { ...p, cardCount: hands[p.id].length } : p
-      );
-      const log = addLog(state.log,
-        `🚨 ${localName} le gritó UNO a ${req.playerName}. ${req.playerName} saca 2 cartas.`
-      );
+      let currentDrawPile = newDrawPile;
+      let logMsg = `🚨 ${localName} le gritó UNO a ${req.playerName}. ${req.playerName} saca 2 cartas.`;
+      const linked = state.linkedPlayers;
+      if (linked?.includes(req.playerId)) {
+        const partnerId = linked[0] === req.playerId ? linked[1] : linked[0];
+        const partner = state.players.find(p => p.id === partnerId && !p.disconnected);
+        if (partner) {
+          const { drawn: pd, newDrawPile: npd } = takeCards(currentDrawPile, 2);
+          currentDrawPile = npd;
+          hands = { ...hands, [partnerId]: [...(hands[partnerId] || []), ...pd] };
+          logMsg += ` ${partner.name} también saca 2 (enlazados).`;
+        }
+      }
+      players = players.map(p => ({ ...p, cardCount: (hands[p.id] || []).length }));
+      const log = addLog(state.log, logMsg);
       transaction.update(roomRef, {
         hands,
         players,
-        drawPile: newDrawPile,
+        drawPile: currentDrawPile,
         unoCallRequired: firebase.firestore.FieldValue.delete(),
         log,
         lastActivity: firebase.firestore.FieldValue.serverTimestamp()
@@ -4031,14 +4040,23 @@ async function runBotTick(state) {
         let { hands, players, drawPile } = cur;
         const { drawn, newDrawPile } = takeCards(drawPile, 2);
         hands = { ...hands, [req.playerId]: [...(hands[req.playerId] || []), ...drawn] };
-        players = players.map(p =>
-          p.id === req.playerId ? { ...p, cardCount: hands[p.id].length } : p
-        );
-        const log = addLog(cur.log,
-          `🚨 ${catcher.name} le gritó UNO a ${req.playerName}. ${req.playerName} saca 2 cartas.`
-        );
+        let currentDrawPile = newDrawPile;
+        let logMsg = `🚨 ${catcher.name} le gritó UNO a ${req.playerName}. ${req.playerName} saca 2 cartas.`;
+        const linked = cur.linkedPlayers;
+        if (linked?.includes(req.playerId)) {
+          const partnerId = linked[0] === req.playerId ? linked[1] : linked[0];
+          const partner = cur.players.find(p => p.id === partnerId && !p.disconnected);
+          if (partner) {
+            const { drawn: pd, newDrawPile: npd } = takeCards(currentDrawPile, 2);
+            currentDrawPile = npd;
+            hands = { ...hands, [partnerId]: [...(hands[partnerId] || []), ...pd] };
+            logMsg += ` ${partner.name} también saca 2 (enlazados).`;
+          }
+        }
+        players = players.map(p => ({ ...p, cardCount: (hands[p.id] || []).length }));
+        const log = addLog(cur.log, logMsg);
         transaction.update(roomRef, {
-          hands, players, drawPile: newDrawPile,
+          hands, players, drawPile: currentDrawPile,
           unoCallRequired: firebase.firestore.FieldValue.delete(),
           log,
           lastActivity: firebase.firestore.FieldValue.serverTimestamp()

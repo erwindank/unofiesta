@@ -4238,6 +4238,18 @@ async function doBotTick(state) {
 }
 
 async function runBotTick(state) {
+  // 0. If a bot needs to yell UNO for themselves, do it before anything else
+  if (state.unoCallRequired && isBot(state.unoCallRequired.playerId)) {
+    const req = state.unoCallRequired;
+    const log = addLog(state.log, `${req.playerName} grita ¡UNO! 🎴`);
+    await db.collection('rooms').doc(currentRoomId).update({
+      unoCallRequired: firebase.firestore.FieldValue.delete(),
+      log,
+      lastActivity: firebase.firestore.FieldValue.serverTimestamp()
+    });
+    return;
+  }
+
   // 1. Wild challenge phase
   if (state.wildChallenge) { await botHandleWildChallenge(state); return; }
 
@@ -4637,6 +4649,9 @@ async function botPlayCard(state, botId, botName, card, cardIdx) {
       topColor: color, topValue: 'wild4',
       currentPlayerIndex: nextPlayerIdx,
       challengeOpen: false, lastActualCard: null, lastClaimedCard: null,
+      unoCallRequired: newHand.length === 1
+        ? { playerId: botId, playerName: botName }
+        : firebase.firestore.FieldValue.delete(),
       log, lastActivity: firebase.firestore.FieldValue.serverTimestamp()
     };
     update.pendingSkips = pendingSkipsW4.length > 0 ? pendingSkipsW4 : firebase.firestore.FieldValue.delete();
@@ -4686,6 +4701,9 @@ async function botPlayCard(state, botId, botName, card, cardIdx) {
       topColor: pileColor, topValue: 'wildPileUp',
       wildPileUpPhase: { pile, pileColor, holderIndex: nextIdx },
       challengeOpen: false, lastActualCard: null, lastClaimedCard: null,
+      unoCallRequired: newHand.length === 1
+        ? { playerId: botId, playerName: botName }
+        : firebase.firestore.FieldValue.delete(),
       log, lastActivity: firebase.firestore.FieldValue.serverTimestamp()
     });
     return;
@@ -4731,6 +4749,9 @@ async function botPlayCard(state, botId, botName, card, cardIdx) {
       linkedPlayers: linked,
       currentPlayerIndex: nextPlayerIndex(state),
       challengeOpen: false, lastActualCard: null, lastClaimedCard: null,
+      unoCallRequired: newHand.length === 1
+        ? { playerId: botId, playerName: botName }
+        : firebase.firestore.FieldValue.delete(),
       log, lastActivity: firebase.firestore.FieldValue.serverTimestamp()
     });
     return;
@@ -4768,6 +4789,9 @@ async function botPlayCard(state, botId, botName, card, cardIdx) {
       linkedPlayers: firebase.firestore.FieldValue.delete(),
       pendingSkips: firebase.firestore.FieldValue.delete(),
       challengeOpen: false, lastActualCard: null, lastClaimedCard: null,
+      unoCallRequired: newHand.length === 1
+        ? { playerId: botId, playerName: botName }
+        : firebase.firestore.FieldValue.delete(),
       log, lastActivity: firebase.firestore.FieldValue.serverTimestamp()
     });
     return;
@@ -4837,7 +4861,9 @@ async function botPlayCard(state, botId, botName, card, cardIdx) {
     direction, drawPile,
     currentPlayerIndex: newCurrentPlayerIndex,
     challengeOpen: false, lastActualCard: null, lastClaimedCard: null,
-    unoCallRequired: firebase.firestore.FieldValue.delete(),
+    unoCallRequired: (!won && newHand.length === 1)
+      ? { playerId: botId, playerName: botName }
+      : firebase.firestore.FieldValue.delete(),
     log, lastActivity: firebase.firestore.FieldValue.serverTimestamp()
   };
   if (draw2LinkedPartnerId) {

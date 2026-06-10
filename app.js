@@ -4151,7 +4151,7 @@ async function botPointTakenVote(state, bots) {
     const candidates = state.players.filter(p => p.id !== bot.id && !p.disconnected);
     if (!candidates.length) continue;
     const target = candidates.reduce((a, b) =>
-      (b.cardCount || 0) > (a.cardCount || 0) ? b : a
+      (b.cardCount || 0) < (a.cardCount || 0) ? b : a
     );
     votes[bot.id] = target.id;
   }

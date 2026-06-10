@@ -174,6 +174,7 @@ window.addEventListener('resume', refreshPresence);
 let selectedCardIdx = null;
 let selectedActualCard = null;
 let claimColor = null;
+let w4cRevealedFor = null;
 let unoAlertTimeout = null;
 let currentUnoCallRequired = null;
 let unoCallClearPending = false;
@@ -2723,48 +2724,76 @@ function renderWild4ChallengeArea(state) {
   const amChooser = ch.chooserId === localUid;
 
   if (!amVictim && !amChooser) {
-    content.innerHTML = `<p class="w4c-wait">⏳ ${ch.targetName} está decidiendo sobre el +4 de ${ch.chooserName}…</p>`;
+    content.innerHTML = `<p class="w4c-wait">⏳ ${ch.targetName} está decidiendo sobre el Comodín +4 de ${ch.chooserName}…</p>`;
     return;
   }
   if (amChooser && !amVictim) {
-    content.innerHTML = `<p class="w4c-wait">⏳ ${ch.targetName} está revisando tu mano y decidiendo si desafiar…</p>`;
+    content.innerHTML = `<p class="w4c-wait">⏳ ${ch.targetName} está decidiendo si desafiar tu Comodín +4…</p>`;
     return;
   }
 
-  // Victim UI — show chooser's hand with playable alternatives highlighted
+  // Victim UI
+  const challengeKey = `${ch.chooserId}-${ch.targetId}`;
+  if (w4cRevealedFor !== challengeKey) w4cRevealedFor = null;
+  const revealed = w4cRevealedFor === challengeKey;
+
   const hand = ch.chooserHandAtPlay || [];
-  const handHTML = hand.map(card => {
-    const playable = WILDS.includes(card.value) ||
-      card.color === ch.prevTopColor || card.value === ch.prevTopValue;
-    const lbl = VALUE_LABEL[card.value];
-    const isWild = WILDS.includes(card.value);
-    const center = isWild ? wildCenterHTML(card.value)
-      : card.value === 'reverse' ? reverseCenterHTML()
-      : `<span class="card-label center">${lbl}</span>`;
-    return `<div class="card ${card.color} ${playable ? 'w4c-playable' : 'w4c-dim'}">
-      ${cornerLabelHTML(card.value, 'tl')}${center}${cornerLabelHTML(card.value, 'br')}
-    </div>`;
-  }).join('');
-
-  const altCount = hand.filter(c =>
-    WILDS.includes(c.value) || c.color === ch.prevTopColor || c.value === ch.prevTopValue
-  ).length;
-
+  const cardCount = hand.length;
   const prevColorName = COLOR_NAME[ch.prevTopColor] || ch.prevTopColor;
-  const verdictClass = altCount > 0 ? 'invalid' : 'valid';
-  const verdictText  = altCount > 0
-    ? `⚠️ ${ch.chooserName} tenía ${altCount} carta${altCount > 1 ? 's' : ''} jugable${altCount > 1 ? 's' : ''} (${prevColorName} u otra coincidencia). El +4 era <strong>inválido</strong>.`
-    : `✅ ${ch.chooserName} no tenía ninguna carta jugable. El +4 era <strong>válido</strong>.`;
 
-  content.innerHTML = `
-    <p class="w4c-title">🃏 Mano de ${ch.chooserName} al jugar el +4 — color era ${prevColorName}:</p>
-    <div class="w4c-hand">${handHTML || '<em style="color:var(--muted)">Mano vacía</em>'}</div>
-    <p class="w4c-verdict ${verdictClass}">${verdictText}</p>
-    <div class="w4c-btns">
-      <button class="btn btn-ghost" onclick="handleWild4Accept()">Aceptar (tomar 4)</button>
-      <button class="btn btn-secondary" onclick="handleWild4Challenge()">Desafiar</button>
-    </div>
-  `;
+  if (!revealed) {
+    // Phase 1: cards face-down
+    const backCards = Array(cardCount).fill(0).map(() =>
+      `<div class="card-back w4c-facedown"><span class="back-uno">UNO</span></div>`
+    ).join('');
+    content.innerHTML = `
+      <p class="w4c-title">🃏 Mano de ${ch.chooserName} — ${cardCount} carta${cardCount !== 1 ? 's' : ''}:</p>
+      <div class="w4c-hand">${backCards || '<em style="color:var(--muted)">Mano vacía</em>'}</div>
+      <div class="w4c-btns">
+        <button class="btn btn-ghost" onclick="handleWild4Accept()">Aceptar (tomar 4)</button>
+        <button class="btn btn-secondary" onclick="revealW4cHand()">Desafiar</button>
+      </div>
+    `;
+  } else {
+    // Phase 2: cards revealed with verdict
+    const handHTML = hand.map(card => {
+      const playable = WILDS.includes(card.value) ||
+        card.color === ch.prevTopColor || card.value === ch.prevTopValue;
+      const lbl = VALUE_LABEL[card.value];
+      const isWild = WILDS.includes(card.value);
+      const center = isWild ? wildCenterHTML(card.value)
+        : card.value === 'reverse' ? reverseCenterHTML()
+        : `<span class="card-label center">${lbl}</span>`;
+      return `<div class="card ${card.color} ${playable ? 'w4c-playable' : 'w4c-dim'}">
+        ${cornerLabelHTML(card.value, 'tl')}${center}${cornerLabelHTML(card.value, 'br')}
+      </div>`;
+    }).join('');
+
+    const altCount = hand.filter(c =>
+      WILDS.includes(c.value) || c.color === ch.prevTopColor || c.value === ch.prevTopValue
+    ).length;
+
+    const verdictClass = altCount > 0 ? 'invalid' : 'valid';
+    const verdictText = altCount > 0
+      ? `⚠️ ${ch.chooserName} sí tenía cartas que podía poner. El Comodín +4 no era <strong>válido</strong>.`
+      : `✅ ${ch.chooserName} no tenía ninguna carta jugable. El Comodín +4 era <strong>válido</strong>.`;
+
+    content.innerHTML = `
+      <p class="w4c-title">🃏 Mano de ${ch.chooserName} al jugar el Comodín +4 — color era ${prevColorName}:</p>
+      <div class="w4c-hand">${handHTML || '<em style="color:var(--muted)">Mano vacía</em>'}</div>
+      <p class="w4c-verdict ${verdictClass}">${verdictText}</p>
+      <div class="w4c-btns">
+        <button class="btn btn-secondary" onclick="handleWild4Challenge()">Confirmar desafío</button>
+      </div>
+    `;
+  }
+}
+
+function revealW4cHand() {
+  const ch = roomState?.wild4Challenge;
+  if (!ch) return;
+  w4cRevealedFor = `${ch.chooserId}-${ch.targetId}`;
+  renderWild4ChallengeArea(roomState);
 }
 
 // ============================================================
@@ -2791,7 +2820,7 @@ async function startWild4Challenge(actualCard, chosenColor, cardIndex) {
   const won = newHand.length === 0;
 
   const log = addLog(state.log,
-    `${localName} jugó +4 y eligió ${COLOR_NAME[chosenColor]}. ${target?.name || '?'} puede aceptar o desafiar.`
+    `${localName} jugó Comodín +4 y eligió ${COLOR_NAME[chosenColor]}. ${target?.name || '?'} puede aceptar o desafiar.`
   );
   const update = {
     players, hands: newHands,
@@ -2839,7 +2868,7 @@ async function handleWild4Accept() {
   }
   players = players.map(p => ({ ...p, cardCount: (hands[p.id] || []).length }));
 
-  const log = addLog(state.log, `${ch.targetName} aceptó el +4 y sacó 4 cartas.`);
+  const log = addLog(state.log, `${ch.targetName} aceptó el Comodín +4 y sacó 4 cartas.`);
   const update = {
     hands, players, drawPile,
     currentPlayerIndex: ch.nextPlayerIndex,
@@ -2875,7 +2904,7 @@ async function handleWild4Challenge() {
     drawPile = newDrawPile;
     hands = { ...hands, [localUid]: [...(hands[localUid] || []), ...drawn] };
     players = players.map(p => ({ ...p, cardCount: (hands[p.id] || []).length }));
-    log = addLog(log, `¡Desafío fallido! ${ch.chooserName} no tenía otras jugables. ${ch.targetName} saca 6 cartas y pierde su turno.`);
+    log = addLog(log, `${ch.chooserName} no tenía ninguna carta jugable. El Comodín +4 era válido. ${ch.targetName} saca 6 cartas y pierde su turno.`);
     newCurrentPlayerIndex = ch.nextPlayerIndex;
   } else {
     // Challenge SUCCEEDED — Wild +4 was illegal. Chooser draws 4, color reverts, victim keeps turn.
@@ -2883,7 +2912,7 @@ async function handleWild4Challenge() {
     drawPile = newDrawPile;
     hands = { ...hands, [ch.chooserId]: [...(hands[ch.chooserId] || []), ...drawn] };
     players = players.map(p => ({ ...p, cardCount: (hands[p.id] || []).length }));
-    log = addLog(log, `¡Desafío exitoso! ${ch.chooserName} sí tenía cartas jugables. ${ch.chooserName} saca 4. El color vuelve a ${COLOR_NAME[ch.prevTopColor]}.`);
+    log = addLog(log, `${ch.chooserName} sí tenía cartas que podía poner. El Comodín +4 no era válido. ${ch.chooserName} saca 4.`);
     newCurrentPlayerIndex = ch.targetIndex;
   }
 
@@ -2893,11 +2922,6 @@ async function handleWild4Challenge() {
     wild4Challenge: firebase.firestore.FieldValue.delete(),
     log, lastActivity: firebase.firestore.FieldValue.serverTimestamp()
   };
-  if (!wasValid) {
-    // Revert color since the Wild +4 was illegal
-    update.topColor = ch.prevTopColor;
-    update.topValue = ch.prevTopValue;
-  }
   await db.collection('rooms').doc(currentRoomId).update(update);
 }
 
@@ -4036,10 +4060,8 @@ async function botWild4ChallengeDecide(state) {
     drawPile = newDrawPile;
     hands = { ...hands, [ch.chooserId]: [...(hands[ch.chooserId] || []), ...drawn] };
     players = players.map(p => ({ ...p, cardCount: (hands[p.id] || []).length }));
-    log = addLog(log, `${botName} desafió el +4. ¡Desafío exitoso! ${ch.chooserName} saca 4. Color vuelve a ${COLOR_NAME[ch.prevTopColor]}.`);
+    log = addLog(log, `${botName} desafió el Comodín +4. ${ch.chooserName} sí tenía cartas que podía poner. El Comodín +4 no era válido. ${ch.chooserName} saca 4.`);
     newCurrentPlayerIndex = ch.targetIndex;
-    update.topColor = ch.prevTopColor;
-    update.topValue = ch.prevTopValue;
   } else {
     // Bot accepts
     const { drawn, newDrawPile } = takeCards(drawPile, 4);
@@ -4058,7 +4080,7 @@ async function botWild4ChallengeDecide(state) {
       }
     }
     players = players.map(p => ({ ...p, cardCount: (hands[p.id] || []).length }));
-    log = addLog(log, `${botName} aceptó el +4 y sacó 4 cartas.`);
+    log = addLog(log, `${botName} aceptó el Comodín +4 y sacó 4 cartas.`);
     newCurrentPlayerIndex = ch.nextPlayerIndex;
     if (pendingSkips.length) update.pendingSkips = pendingSkips;
     else update.pendingSkips = firebase.firestore.FieldValue.delete();
@@ -4288,7 +4310,7 @@ async function botPlayCard(state, botId, botName, card, cardIdx) {
     const target     = state.players[targetIdx];
     const nextAfterTarget = nextActive(targetIdx, state.direction);
     const log = addLog(state.log,
-      `${botName} jugó +4 y eligió ${COLOR_NAME[color]}. ${target?.name || '?'} puede aceptar o desafiar.`
+      `${botName} jugó Comodín +4 y eligió ${COLOR_NAME[color]}. ${target?.name || '?'} puede aceptar o desafiar.`
     );
     const update = {
       players, hands: newHands,

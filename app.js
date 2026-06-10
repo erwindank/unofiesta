@@ -2918,14 +2918,28 @@ async function handleWild4Challenge() {
   let { hands, players, drawPile } = state;
   let log = state.log;
   let newCurrentPlayerIndex;
+  let pendingSkips = state.pendingSkips ? [...state.pendingSkips] : [];
 
   if (wasValid) {
     // Challenge FAILED — Wild +4 was legitimate. Challenger draws 6.
     const { drawn, newDrawPile } = takeCards(drawPile, 6);
     drawPile = newDrawPile;
     hands = { ...hands, [localUid]: [...(hands[localUid] || []), ...drawn] };
-    players = players.map(p => ({ ...p, cardCount: (hands[p.id] || []).length }));
     log = addLog(log, `${ch.chooserName} no tenía ninguna carta jugable. El Comodín +4 era válido. ${ch.targetName} saca 6 cartas y pierde su turno.`);
+    // Linked partner also draws 6 and skips
+    const linked = state.linkedPlayers;
+    if (linked?.includes(localUid)) {
+      const partnerId = linked[0] === localUid ? linked[1] : linked[0];
+      const partner = players.find(p => p.id === partnerId && !p.disconnected);
+      if (partner) {
+        const { drawn: pd, newDrawPile: npd } = takeCards(drawPile, 6);
+        drawPile = npd;
+        hands = { ...hands, [partnerId]: [...(hands[partnerId] || []), ...pd] };
+        if (!pendingSkips.includes(partnerId)) pendingSkips.push(partnerId);
+        log = addLog(log, `${partner.name} también saca 6 (enlazados).`);
+      }
+    }
+    players = players.map(p => ({ ...p, cardCount: (hands[p.id] || []).length }));
     newCurrentPlayerIndex = ch.nextPlayerIndex;
   } else {
     // Challenge SUCCEEDED — Wild +4 was illegal. Chooser draws 4, color reverts, victim keeps turn.
@@ -2955,6 +2969,8 @@ async function handleWild4Challenge() {
     wild4Challenge: firebase.firestore.FieldValue.delete(),
     log, lastActivity: firebase.firestore.FieldValue.serverTimestamp()
   };
+  if (pendingSkips.length) update.pendingSkips = pendingSkips;
+  else update.pendingSkips = firebase.firestore.FieldValue.delete();
   await db.collection('rooms').doc(currentRoomId).update(update);
 }
 

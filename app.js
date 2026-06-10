@@ -975,6 +975,7 @@ async function handleStart() {
     endVotes: [],
     linkedPlayers: firebase.firestore.FieldValue.delete(),
     pendingSkips: firebase.firestore.FieldValue.delete(),
+    echoPenalty: firebase.firestore.FieldValue.delete(),
     lastActivity: firebase.firestore.FieldValue.serverTimestamp()
   });
 }
@@ -1010,6 +1011,8 @@ function renderGame(state) {
   const handLabel = document.getElementById('hand-label');
   if (linked.includes(localUid)) {
     handLabel.innerHTML = 'Tu mano <span class="linked-badge">🔗 ENLAZADO</span>';
+  } else if (state.echoPenalty?.breakOnPlayerId === localUid) {
+    handLabel.innerHTML = 'Tu mano <span class="linked-badge" style="background:var(--warning,#e67e22)">⚡ ECO ACTIVO</span>';
   } else {
     handLabel.textContent = 'Tu mano';
   }
@@ -1203,6 +1206,7 @@ function renderOpponents(state) {
   const others = state.players.filter(p => p.id !== localUid);
   const linked = state.linkedPlayers || [];
 
+  const echoPenalty = state.echoPenalty;
   row.innerHTML = others.map(p => {
     const isCurrent = state.players[state.currentPlayerIndex]?.id === p.id;
     const nextIdx = nextPlayerIndex(state);
@@ -1211,6 +1215,7 @@ function renderOpponents(state) {
     const isSpeaking = !!speakingStates[p.id];
     const hasVoice = !!peerConns[p.id];
     const isLinked = linked.includes(p.id);
+    const isEchoed = echoPenalty?.echoedPlayerId === p.id;
     const miniCards = Array(Math.min(p.cardCount, 12)).fill(0)
       .map(() => `<div class="card-back mini"></div>`).join('');
     return `<div class="opponent ${isCurrent ? 'active-player' : ''}
@@ -1219,6 +1224,7 @@ function renderOpponents(state) {
                                   ${isLinked ? 'is-linked' : ''}"
                  data-uid="${esc(p.id)}">
       ${isLinked ? '<div class="linked-badge">🔗 ENLAZADO</div>' : ''}
+      ${isEchoed ? '<div class="linked-badge" style="background:var(--warning,#e67e22)">⚡ ECO</div>' : ''}
       <div class="opponent-name">${esc(p.name)}${isDisconnected ? ' <span class="dc-badge">desconectado</span>' : ''}${hasVoice ? ' <span class="voice-mic-icon">🎤</span>' : ''}</div>
       <div class="opponent-cards">${miniCards}</div>
       <div class="opponent-count">${p.cardCount}🃏</div>
@@ -2576,17 +2582,30 @@ async function handleTakePile() {
   if (myPlayer?.id !== localUid) return;
 
   let newHands = { ...state.hands };
-  let players = [...state.players];
   const myHand = state.hands?.[localUid] || [];
   newHands[localUid] = [...myHand, ...phase.pile];
+  const pileCount = phase.pile.length;
 
-  const drawPile = state.drawPile;
-  players = players.map(p => ({ ...p, cardCount: (newHands[p.id] || []).length }));
-  const n = players.length;
+  let drawPile = state.drawPile;
+  const n = state.players.length;
   const afterIdx = ((phase.holderIndex + state.direction) % n + n) % n;
-  const log = addLog(state.log,
-    `${localName} toma la mini-pila (${phase.pile.length} cartas). El color que continúa es ${COLOR_NAME[phase.pileColor]}.`
-  );
+
+  let logMsg = `${localName} toma la mini-pila (${pileCount} cartas).`;
+  const linked = state.linkedPlayers;
+  if (linked?.includes(localUid)) {
+    const partnerId = linked[0] === localUid ? linked[1] : linked[0];
+    const partner = state.players.find(p => p.id === partnerId && !p.disconnected);
+    if (partner) {
+      const { drawn: pd, newDrawPile: npd } = takeCards(drawPile, pileCount);
+      drawPile = npd;
+      newHands[partnerId] = [...(newHands[partnerId] || []), ...pd];
+      logMsg += ` ${partner.name} también saca ${pileCount} (enlazados).`;
+    }
+  }
+  logMsg += ` El color que continúa es ${COLOR_NAME[phase.pileColor]}.`;
+  const log = addLog(state.log, logMsg);
+
+  const players = state.players.map(p => ({ ...p, cardCount: (newHands[p.id] || []).length }));
 
   const update = {
     hands: newHands, players, drawPile,
@@ -2636,6 +2655,7 @@ function renderWildPileUpPanel(state) {
 
 let drawnTogetherCardIndex = null;
 let drawnTogetherSelected = [];
+let drawnTogetherEchoMode = false;
 
 function showDrawnTogetherDialog(cardIndex) {
   drawnTogetherCardIndex = cardIndex;
@@ -2643,6 +2663,8 @@ function showDrawnTogetherDialog(cardIndex) {
   selectedCardIdx = cardIndex;
   selectedActualCard = roomState?.hands?.[localUid]?.[cardIndex] || null;
   claimColor = roomState?.topColor || 'red';
+  const others = (roomState?.players || []).filter(p => p.id !== localUid && !p.disconnected);
+  drawnTogetherEchoMode = others.length < 2;
   document.getElementById('drawn-together-dialog').classList.remove('hidden');
   renderDrawnTogetherDialog(roomState);
 }
@@ -2651,6 +2673,7 @@ function cancelDrawnTogether() {
   document.getElementById('drawn-together-dialog').classList.add('hidden');
   drawnTogetherCardIndex = null;
   drawnTogetherSelected = [];
+  drawnTogetherEchoMode = false;
   selectedCardIdx = null;
   selectedActualCard = null;
 }
@@ -2670,28 +2693,51 @@ function setDTColor(color) { claimColor = color; renderDrawnTogetherDialog(roomS
 function renderDrawnTogetherDialog(state) {
   const el = document.getElementById('drawn-together-dialog');
   if (!state || el.classList.contains('hidden')) return;
-  const others = state.players.filter(p => p.id !== localUid && !p.disconnected);
-  document.getElementById('dt-players').innerHTML = others.map(p => {
-    const sel = drawnTogetherSelected.includes(p.id);
-    return `<button class="btn ${sel ? 'btn-primary' : 'btn-secondary'} dt-player-btn"
-      onclick="toggleDrawnTogetherPlayer('${p.id}')">
-      ${sel ? '⛓ ' : ''}${esc(p.name)}
-    </button>`;
-  }).join('');
+
+  const titleEl   = document.getElementById('dt-title');
+  const echoDescEl = document.getElementById('dt-echo-desc');
+  const confirmBtn = document.getElementById('dt-confirm-btn');
+
+  if (drawnTogetherEchoMode) {
+    titleEl.textContent = '⬌ Comodín de Enlace — Modo Eco';
+    echoDescEl.classList.remove('hidden');
+    document.getElementById('dt-players').innerHTML = '';
+    confirmBtn.textContent = 'Activar Eco';
+    confirmBtn.disabled = false;
+  } else {
+    titleEl.textContent = '⬌ Comodín de Enlace — Elige 2 jugadores a enlazar';
+    echoDescEl.classList.add('hidden');
+    const others = state.players.filter(p => p.id !== localUid && !p.disconnected);
+    document.getElementById('dt-players').innerHTML = others.map(p => {
+      const sel = drawnTogetherSelected.includes(p.id);
+      return `<button class="btn ${sel ? 'btn-primary' : 'btn-secondary'} dt-player-btn"
+        onclick="toggleDrawnTogetherPlayer('${p.id}')">
+        ${sel ? '⛓ ' : ''}${esc(p.name)}
+      </button>`;
+    }).join('');
+    confirmBtn.textContent = 'Enlazar';
+    confirmBtn.disabled = drawnTogetherSelected.length !== 2;
+  }
+
   document.getElementById('dt-color-picker').innerHTML = COLORS.map(c =>
     `<button class="color-btn ${c} ${claimColor === c ? 'selected' : ''}"
       onclick="setDTColor('${c}')" title="${COLOR_NAME[c]}"></button>`
   ).join('');
-  const confirmBtn = document.getElementById('dt-confirm-btn');
-  confirmBtn.disabled = drawnTogetherSelected.length !== 2;
 }
 
 async function confirmDrawnTogether() {
-  if (drawnTogetherSelected.length !== 2 || drawnTogetherCardIndex === null) return;
+  if (drawnTogetherCardIndex === null) return;
   document.getElementById('drawn-together-dialog').classList.add('hidden');
-  await startWildDrawnTogether(drawnTogetherCardIndex, [...drawnTogetherSelected], claimColor);
-  drawnTogetherCardIndex = null;
-  drawnTogetherSelected = [];
+  if (drawnTogetherEchoMode) {
+    await startWildEchoPenalty(drawnTogetherCardIndex, claimColor);
+    drawnTogetherCardIndex = null;
+    drawnTogetherEchoMode = false;
+  } else {
+    if (drawnTogetherSelected.length !== 2) return;
+    await startWildDrawnTogether(drawnTogetherCardIndex, [...drawnTogetherSelected], claimColor);
+    drawnTogetherCardIndex = null;
+    drawnTogetherSelected = [];
+  }
   selectedCardIdx = null;
   selectedActualCard = null;
 }
@@ -2727,6 +2773,45 @@ async function startWildDrawnTogether(cardIndex, linkedIds, chosenColor) {
     await db.collection('rooms').doc(currentRoomId).update(update);
     return;
   }
+
+  await db.collection('rooms').doc(currentRoomId).update(update);
+}
+
+async function startWildEchoPenalty(cardIndex, chosenColor) {
+  const state = roomState;
+  const myHand = [...(state.hands?.[localUid] || [])];
+  const newHand = myHand.filter((_, i) => i !== cardIndex);
+  const newHands = { ...state.hands, [localUid]: newHand };
+  const players = state.players.map(p =>
+    p.id === localUid ? { ...p, cardCount: newHand.length } : p
+  );
+  const won = newHand.length === 0;
+  const opponent = state.players.find(p => p.id !== localUid && !p.disconnected);
+  const opponentName = opponent?.name || '?';
+  const log = addLog(state.log,
+    `${localName} jugó ⬌ Comodín de Enlace. ¡Modo Eco! Si ${opponentName} juega +2 o +4 contra ${localName}, ${opponentName} también sacará esas cartas. Color: ${COLOR_NAME[chosenColor]}.`
+  );
+
+  const update = {
+    players, hands: newHands,
+    topColor: chosenColor, topValue: 'wildDrawnTogether',
+    echoPenalty: { echoedPlayerId: opponent?.id || null, breakOnPlayerId: localUid },
+    currentPlayerIndex: nextPlayerIndex(state),
+    log, lastActivity: firebase.firestore.FieldValue.serverTimestamp()
+  };
+
+  if (won) {
+    update.status = 'ended';
+    update.winner = localUid;
+    update.winnerName = localName;
+    update.echoPenalty = firebase.firestore.FieldValue.delete();
+    await db.collection('rooms').doc(currentRoomId).update(update);
+    return;
+  }
+
+  update.unoCallRequired = newHand.length === 1
+    ? { playerId: localUid, playerName: localName }
+    : firebase.firestore.FieldValue.delete();
 
   await db.collection('rooms').doc(currentRoomId).update(update);
 }
@@ -2886,9 +2971,20 @@ async function handleWild4Accept() {
       if (!pendingSkips.includes(partnerId)) pendingSkips.push(partnerId);
     }
   }
+  // Echo penalty: if the wild4 chooser is the echoed player, they also draw 4 and skip
+  let echoMsg = '';
+  const echo = state.echoPenalty;
+  if (echo?.echoedPlayerId === ch.chooserId) {
+    const chooserName = state.players.find(p => p.id === ch.chooserId)?.name || ch.chooserName;
+    const { drawn: ed, newDrawPile: epd } = takeCards(drawPile, 4);
+    drawPile = epd;
+    hands = { ...hands, [ch.chooserId]: [...(hands[ch.chooserId] || []), ...ed] };
+    if (!pendingSkips.includes(ch.chooserId)) pendingSkips.push(ch.chooserId);
+    echoMsg = ` ¡Eco! ${chooserName} también saca 4.`;
+  }
   players = players.map(p => ({ ...p, cardCount: (hands[p.id] || []).length }));
 
-  const log = addLog(state.log, `${ch.targetName} aceptó el Comodín +4 y sacó 4 cartas.`);
+  const log = addLog(state.log, `${ch.targetName} aceptó el Comodín +4 y sacó 4 cartas.${echoMsg}`);
   const update = {
     hands, players, drawPile,
     currentPlayerIndex: ch.nextPlayerIndex,
@@ -2938,6 +3034,16 @@ async function handleWild4Challenge() {
         if (!pendingSkips.includes(partnerId)) pendingSkips.push(partnerId);
         log = addLog(log, `${partner.name} también saca 6 (enlazados).`);
       }
+    }
+    // Echo penalty: chooser played a legitimate +4 so the echo fires — chooser also draws 6 and skips
+    const echoCh = state.echoPenalty;
+    if (echoCh?.echoedPlayerId === ch.chooserId) {
+      const chooserName = players.find(p => p.id === ch.chooserId)?.name || ch.chooserName;
+      const { drawn: ed, newDrawPile: epd } = takeCards(drawPile, 6);
+      drawPile = epd;
+      hands = { ...hands, [ch.chooserId]: [...(hands[ch.chooserId] || []), ...ed] };
+      if (!pendingSkips.includes(ch.chooserId)) pendingSkips.push(ch.chooserId);
+      log = addLog(log, `¡Eco! ${chooserName} también saca 6.`);
     }
     players = players.map(p => ({ ...p, cardCount: (hands[p.id] || []).length }));
     newCurrentPlayerIndex = ch.nextPlayerIndex;
@@ -3104,6 +3210,14 @@ async function playNormalCard(actualCard, cardIndex, chosenColor = null) {
         log = addLog(log, `${partner2.name} también saca 2 (enlazados).`);
       }
     }
+    // Echo penalty: if localUid played draw2 and is the echoed player, they draw 2 too and skip
+    if (state.echoPenalty?.echoedPlayerId === localUid) {
+      const { drawn: ed, newDrawPile: epd } = takeCards(drawPile, 2);
+      drawPile = epd;
+      newHands[localUid] = [...(newHands[localUid] || []), ...ed];
+      draw2LinkedPartnerId = localUid;
+      log = addLog(log, `¡Eco! ${localName} también saca 2.`);
+    }
     players = players.map(p => ({ ...p, cardCount: (newHands[p.id] || []).length }));
     newCurrentPlayerIndex = nextActive(nextIdx, direction);
   }
@@ -3133,6 +3247,11 @@ async function playNormalCard(actualCard, cardIndex, chosenColor = null) {
     update.status = 'ended';
     update.winner = localUid;
     update.winnerName = localName;
+  }
+
+  // Echo break: localUid is taking their turn, so the echo they activated ends now
+  if (state.echoPenalty?.breakOnPlayerId === localUid) {
+    update.echoPenalty = firebase.firestore.FieldValue.delete();
   }
 
   await db.collection('rooms').doc(currentRoomId).update(update);
@@ -3256,12 +3375,17 @@ async function handlePassTurn() {
     if (partner) log = addLog(log, `${partner.name} también saca 1 carta (enlazados).`);
   }
 
-  await db.collection('rooms').doc(currentRoomId).update({
+  const passUpdate = {
     currentPlayerIndex: nextPlayerIndex(state),
     unoCallRequired: firebase.firestore.FieldValue.delete(),
     log,
     lastActivity: firebase.firestore.FieldValue.serverTimestamp()
-  });
+  };
+  // Echo break: localUid is finishing their turn, echo they activated ends now
+  if (state.echoPenalty?.breakOnPlayerId === localUid) {
+    passUpdate.echoPenalty = firebase.firestore.FieldValue.delete();
+  }
+  await db.collection('rooms').doc(currentRoomId).update(passUpdate);
 }
 
 // ============================================================
@@ -3358,7 +3482,8 @@ async function backToLobby() {
     readyVotes: [],
     players: roomState.players.map(p => ({ ...p, cardCount: 0 })),
     linkedPlayers: firebase.firestore.FieldValue.delete(),
-    pendingSkips: firebase.firestore.FieldValue.delete()
+    pendingSkips: firebase.firestore.FieldValue.delete(),
+    echoPenalty: firebase.firestore.FieldValue.delete()
   });
 }
 
@@ -4159,8 +4284,19 @@ async function botWild4ChallengeDecide(state) {
         if (!pendingSkips.includes(partnerId)) pendingSkips.push(partnerId);
       }
     }
+    // Echo penalty: if the chooser is the echoed player, they also draw 4 and skip
+    let echoAcceptMsg = '';
+    const echoAccept = state.echoPenalty;
+    if (echoAccept?.echoedPlayerId === ch.chooserId) {
+      const chooserName = state.players.find(p => p.id === ch.chooserId)?.name || ch.chooserName;
+      const { drawn: ed, newDrawPile: epd } = takeCards(drawPile, 4);
+      drawPile = epd;
+      hands = { ...hands, [ch.chooserId]: [...(hands[ch.chooserId] || []), ...ed] };
+      if (!pendingSkips.includes(ch.chooserId)) pendingSkips.push(ch.chooserId);
+      echoAcceptMsg = ` ¡Eco! ${chooserName} también saca 4.`;
+    }
     players = players.map(p => ({ ...p, cardCount: (hands[p.id] || []).length }));
-    log = addLog(log, `${botName} aceptó el Comodín +4 y sacó 4 cartas.`);
+    log = addLog(log, `${botName} aceptó el Comodín +4 y sacó 4 cartas.${echoAcceptMsg}`);
     newCurrentPlayerIndex = ch.nextPlayerIndex;
     if (pendingSkips.length) update.pendingSkips = pendingSkips;
     else update.pendingSkips = firebase.firestore.FieldValue.delete();
@@ -4243,20 +4379,34 @@ async function botWildPileUpAct(state, botId, botName) {
 
   if (matchIdx === -1) {
     // Take the pile
-    const newHands = { ...state.hands, [botId]: [...myHand, ...phase.pile] };
-    const players = state.players.map(p => ({ ...p, cardCount: (newHands[p.id] || []).length }));
-    const n = players.length;
+    let newHands = { ...state.hands, [botId]: [...myHand, ...phase.pile] };
+    const pileCount = phase.pile.length;
+    let drawPile = state.drawPile;
+    const n = state.players.length;
     const afterIdx = ((phase.holderIndex + state.direction) % n + n) % n;
-    const log = addLog(state.log,
-      `${botName} toma la mini-pila (${phase.pile.length} cartas). El color que continúa es ${COLOR_NAME[phase.pileColor]}.`
-    );
+    let logMsg = `${botName} toma la mini-pila (${pileCount} cartas).`;
+    const linked = state.linkedPlayers;
+    if (linked?.includes(botId)) {
+      const partnerId = linked[0] === botId ? linked[1] : linked[0];
+      const partner = state.players.find(p => p.id === partnerId && !p.disconnected);
+      if (partner) {
+        const { drawn: pd, newDrawPile: npd } = takeCards(drawPile, pileCount);
+        drawPile = npd;
+        newHands[partnerId] = [...(newHands[partnerId] || []), ...pd];
+        logMsg += ` ${partner.name} también saca ${pileCount} (enlazados).`;
+      }
+    }
+    logMsg += ` El color que continúa es ${COLOR_NAME[phase.pileColor]}.`;
+    const log = addLog(state.log, logMsg);
+
+    const players = state.players.map(p => ({ ...p, cardCount: (newHands[p.id] || []).length }));
     await db.collection('rooms').doc(currentRoomId).update({
       hands: newHands, players,
       topColor: phase.pileColor, topValue: 'wildPileUp',
       wildPileUpPhase: firebase.firestore.FieldValue.delete(),
       currentPlayerIndex: afterIdx,
       log, lastActivity: firebase.firestore.FieldValue.serverTimestamp(),
-      drawPile: state.drawPile
+      drawPile
     });
     return;
   }
@@ -4329,6 +4479,7 @@ async function botPlayCard(state, botId, botName, card, cardIdx) {
   const newHand = myHand.filter((_, i) => i !== cardIdx);
   const won = newHand.length === 0;
   const n = state.players.length;
+  const echoBreakForBot = state.echoPenalty?.breakOnPlayerId === botId;
 
   // Wild → change color and advance turn
   if (card.value === 'wild') {
@@ -4348,6 +4499,7 @@ async function botPlayCard(state, botId, botName, card, cardIdx) {
       ? { playerId: botId, playerName: botName }
       : firebase.firestore.FieldValue.delete();
     if (won) { update.status = 'ended'; update.winner = botId; update.winnerName = botName; }
+    if (echoBreakForBot) update.echoPenalty = firebase.firestore.FieldValue.delete();
     await db.collection('rooms').doc(currentRoomId).update(update);
     return;
   }
@@ -4377,6 +4529,7 @@ async function botPlayCard(state, botId, botName, card, cardIdx) {
     update.unoCallRequired = (!won && newHand.length === 1)
       ? { playerId: botId, playerName: botName }
       : firebase.firestore.FieldValue.delete();
+    if (echoBreakForBot) update.echoPenalty = firebase.firestore.FieldValue.delete();
     if (won) {
       update.status = 'ended'; update.winner = botId; update.winnerName = botName;
       await db.collection('rooms').doc(currentRoomId).update(update);
@@ -4422,16 +4575,18 @@ async function botPlayCard(state, botId, botName, card, cardIdx) {
     );
 
     if (won) {
-      await db.collection('rooms').doc(currentRoomId).update({
+      const pileWonUpd = {
         players, hands: newHands, drawPile,
         topColor: pileColor, topValue: 'wildPileUp',
         status: 'ended', winner: botId, winnerName: botName,
         log, lastActivity: firebase.firestore.FieldValue.serverTimestamp()
-      });
+      };
+      if (echoBreakForBot) pileWonUpd.echoPenalty = firebase.firestore.FieldValue.delete();
+      await db.collection('rooms').doc(currentRoomId).update(pileWonUpd);
       return;
     }
 
-    await db.collection('rooms').doc(currentRoomId).update({
+    const pileUpd = {
       players, hands: newHands, drawPile,
       topColor: pileColor, topValue: 'wildPileUp',
       wildPileUpPhase: { pile, pileColor, holderIndex: nextIdx },
@@ -4439,26 +4594,50 @@ async function botPlayCard(state, botId, botName, card, cardIdx) {
         ? { playerId: botId, playerName: botName }
         : firebase.firestore.FieldValue.delete(),
       log, lastActivity: firebase.firestore.FieldValue.serverTimestamp()
-    });
+    };
+    if (echoBreakForBot) pileUpd.echoPenalty = firebase.firestore.FieldValue.delete();
+    await db.collection('rooms').doc(currentRoomId).update(pileUpd);
     return;
   }
 
   // Wild Drawn Together
   if (card.value === 'wildDrawnTogether') {
     const others = state.players.filter(p => p.id !== botId && !p.disconnected);
-    if (others.length < 2) {
-      // Not enough players — draw a different card instead (fallback: draw and pass)
-      await botDrawAndPass(state, botId, botName);
-      return;
-    }
     const newHands = { ...state.hands, [botId]: newHand };
     const players = state.players.map(p =>
       p.id === botId ? { ...p, cardCount: newHand.length } : p
     );
     const won = newHand.length === 0;
+    const color = botPickColor(myHand);
+
+    if (others.length < 2) {
+      // 2-player mode: activate echo penalty on the single opponent
+      const opponent = others[0];
+      if (!opponent) { await botDrawAndPass(state, botId, botName); return; }
+      const echoLog = addLog(state.log,
+        `${botName} jugó ⬌ Comodín de Enlace. ¡Modo Eco! Si ${opponent.name} juega +2 o +4 contra ${botName}, ${opponent.name} también sacará esas cartas. Color: ${COLOR_NAME[color]}.`
+      );
+      const echoUpdate = {
+        players, hands: newHands,
+        topColor: color, topValue: 'wildDrawnTogether',
+        echoPenalty: { echoedPlayerId: opponent.id, breakOnPlayerId: botId },
+        currentPlayerIndex: nextPlayerIndex(state),
+        log: echoLog, lastActivity: firebase.firestore.FieldValue.serverTimestamp()
+      };
+      if (won) {
+        echoUpdate.status = 'ended'; echoUpdate.winner = botId; echoUpdate.winnerName = botName;
+        echoUpdate.echoPenalty = firebase.firestore.FieldValue.delete();
+      } else {
+        echoUpdate.unoCallRequired = newHand.length === 1
+          ? { playerId: botId, playerName: botName }
+          : firebase.firestore.FieldValue.delete();
+      }
+      await db.collection('rooms').doc(currentRoomId).update(echoUpdate);
+      return;
+    }
+
     const nonBots = others.filter(p => !isBot(p.id));
     const linked = (nonBots.length >= 2 ? nonBots : others).slice(0, 2).map(p => p.id);
-    const color = botPickColor(myHand);
     const p1 = state.players.find(p => p.id === linked[0])?.name || '?';
     const p2 = state.players.find(p => p.id === linked[1])?.name || '?';
     const log = addLog(state.log,
@@ -4466,17 +4645,19 @@ async function botPlayCard(state, botId, botName, card, cardIdx) {
     );
 
     if (won) {
-      await db.collection('rooms').doc(currentRoomId).update({
+      const dtWonUpd = {
         players, hands: newHands,
         topColor: color, topValue: 'wildDrawnTogether',
         currentPlayerIndex: nextPlayerIndex(state),
         status: 'ended', winner: botId, winnerName: botName,
         log, lastActivity: firebase.firestore.FieldValue.serverTimestamp()
-      });
+      };
+      if (echoBreakForBot) dtWonUpd.echoPenalty = firebase.firestore.FieldValue.delete();
+      await db.collection('rooms').doc(currentRoomId).update(dtWonUpd);
       return;
     }
 
-    await db.collection('rooms').doc(currentRoomId).update({
+    const dtUpd = {
       players, hands: newHands,
       topColor: color, topValue: 'wildDrawnTogether',
       linkedPlayers: linked,
@@ -4485,7 +4666,9 @@ async function botPlayCard(state, botId, botName, card, cardIdx) {
         ? { playerId: botId, playerName: botName }
         : firebase.firestore.FieldValue.delete(),
       log, lastActivity: firebase.firestore.FieldValue.serverTimestamp()
-    });
+    };
+    if (echoBreakForBot) dtUpd.echoPenalty = firebase.firestore.FieldValue.delete();
+    await db.collection('rooms').doc(currentRoomId).update(dtUpd);
     return;
   }
 
@@ -4502,18 +4685,20 @@ async function botPlayCard(state, botId, botName, card, cardIdx) {
     );
 
     if (won) {
-      await db.collection('rooms').doc(currentRoomId).update({
+      const ptWonUpd = {
         players, hands: newHands,
         topColor: card.color, topValue: 'pointTaken',
         linkedPlayers: firebase.firestore.FieldValue.delete(),
         pendingSkips: firebase.firestore.FieldValue.delete(),
         status: 'ended', winner: botId, winnerName: botName,
         log, lastActivity: firebase.firestore.FieldValue.serverTimestamp()
-      });
+      };
+      if (echoBreakForBot) ptWonUpd.echoPenalty = firebase.firestore.FieldValue.delete();
+      await db.collection('rooms').doc(currentRoomId).update(ptWonUpd);
       return;
     }
 
-    await db.collection('rooms').doc(currentRoomId).update({
+    const ptUpd = {
       players, hands: newHands,
       topColor: card.color, topValue: 'pointTaken',
       pointTakenPhase: { triggerPlayerId: botId, nextPlayerIndex: nextIdx, votes: {} },
@@ -4523,7 +4708,9 @@ async function botPlayCard(state, botId, botName, card, cardIdx) {
         ? { playerId: botId, playerName: botName }
         : firebase.firestore.FieldValue.delete(),
       log, lastActivity: firebase.firestore.FieldValue.serverTimestamp()
-    });
+    };
+    if (echoBreakForBot) ptUpd.echoPenalty = firebase.firestore.FieldValue.delete();
+    await db.collection('rooms').doc(currentRoomId).update(ptUpd);
     return;
   }
 
@@ -4601,6 +4788,14 @@ async function botPlayCard(state, botId, botName, card, cardIdx) {
         log = addLog(log, `${partner2.name} también saca 2 (enlazados).`);
       }
     }
+    // Echo penalty: if botId played draw2 and is the echoed player, they draw 2 too and skip
+    if (state.echoPenalty?.echoedPlayerId === botId) {
+      const { drawn: ed, newDrawPile: epd } = takeCards(drawPile, 2);
+      drawPile = epd;
+      newHands[botId] = [...(newHands[botId] || []), ...ed];
+      draw2LinkedPartnerId = botId;
+      log = addLog(log, `¡Eco! ${botName} también saca 2.`);
+    }
     players = players.map(p => ({ ...p, cardCount: (newHands[p.id] || []).length }));
     newCurrentPlayerIndex = nextActiveFn(nextIdx, direction);
   }
@@ -4620,6 +4815,10 @@ async function botPlayCard(state, botId, botName, card, cardIdx) {
     update.pendingSkips = [...new Set([...(state.pendingSkips || []), ...botPartnersToSkip])];
   }
   if (won) { update.status = 'ended'; update.winner = botId; update.winnerName = botName; }
+  // Echo break: bot is taking its turn, so the echo it activated ends now
+  if (state.echoPenalty?.breakOnPlayerId === botId) {
+    update.echoPenalty = firebase.firestore.FieldValue.delete();
+  }
   await db.collection('rooms').doc(currentRoomId).update(update);
 }
 
@@ -4648,10 +4847,15 @@ async function botDrawAndPass(state, botId, botName) {
     const partner = state.players.find(p => p.id === botDrawPartnerId);
     if (partner) log = addLog(log, `${partner.name} también saca 1 carta (enlazados).`);
   }
-  await db.collection('rooms').doc(currentRoomId).update({
+  const botDrawUpdate = {
     hands: newHands, players, drawPile,
     currentPlayerIndex: nextPlayerIndex(state),
     unoCallRequired: firebase.firestore.FieldValue.delete(),
     log, lastActivity: firebase.firestore.FieldValue.serverTimestamp()
-  });
+  };
+  // Echo break: bot is taking its turn, so the echo it activated ends now
+  if (state.echoPenalty?.breakOnPlayerId === botId) {
+    botDrawUpdate.echoPenalty = firebase.firestore.FieldValue.delete();
+  }
+  await db.collection('rooms').doc(currentRoomId).update(botDrawUpdate);
 }

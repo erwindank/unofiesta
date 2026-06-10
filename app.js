@@ -58,23 +58,6 @@ function rainbowHTML(text) {
   ).join('');
 }
 
-function cardStatusHTML(card) {
-  if (!card) return '?';
-  const hex = LOG_COLOR_HEX[card.color] || '#fff';
-  const colorSpan = `<span style="color:${hex};font-weight:700">${COLOR_NAME[card.color]}</span>`;
-  if (card.value === 'wild')  return `${rainbowHTML('Comodín')} y cambia el color a ${colorSpan}`;
-  if (card.value === 'wild4') return `${rainbowHTML('Comodín')} <b>+4</b> y cambia el color a ${colorSpan}`;
-  if (card.value === 'wildc4Plus') return `${rainbowHTML('Comodín')} <b>+4</b> y cambia el color a ${colorSpan}`;
-  return `<span style="color:${hex};font-weight:700">${COLOR_NAME[card.color]} ${VALUE_LABEL[card.value]}</span>`;
-}
-
-function cardLogName(card) {
-  if (!card) return '?';
-  if (card.value === 'wild')  return `Comodín y cambia el color a ${COLOR_NAME[card.color]}`;
-  if (card.value === 'wild4') return `Comodín +4 y cambia el color a ${COLOR_NAME[card.color]}`;
-  if (card.value === 'wildc4Plus') return `Comodín +4 y cambia el color a ${COLOR_NAME[card.color]}`;
-  return `${COLOR_NAME[card.color]} ${VALUE_LABEL[card.value]}`;
-}
 
 function buildCardHTML(card, extraStyle) {
   if (!card) return '';
@@ -979,6 +962,8 @@ async function handleStart() {
     winnerName: null,
     winnerReason: null,
     endVotes: [],
+    linkedPlayers: firebase.firestore.FieldValue.delete(),
+    pendingSkips: firebase.firestore.FieldValue.delete(),
     lastActivity: firebase.firestore.FieldValue.serverTimestamp()
   });
 }
@@ -2793,19 +2778,39 @@ async function playNormalCard(actualCard, cardIndex, chosenColor = null) {
   let newCurrentPlayerIndex = nextIdx;
   let draw2LinkedPartnerId = null;
   let wild4LinkedPartnerId = null;
+  let skipLinkedPartnerId = null;
+
+  const getLinkedPartner = (targetId) => {
+    const lp = state.linkedPlayers;
+    if (!lp?.includes(targetId)) return null;
+    const partnerId = lp[0] === targetId ? lp[1] : lp[0];
+    return state.players.find(p => p.id === partnerId && !p.disconnected) ? partnerId : null;
+  };
 
   if (actualCard.value === 'reverse') {
     direction = -direction;
     if (activeN === 2) {
-      log = addLog(log, `${state.players[nextIdx]?.name} pierde su turno (reversa).`);
+      const skippedPlayer = state.players[nextIdx];
+      log = addLog(log, `${skippedPlayer?.name} pierde su turno (reversa).`);
       newCurrentPlayerIndex = state.currentPlayerIndex;
+      const partner = getLinkedPartner(skippedPlayer?.id);
+      if (partner) {
+        skipLinkedPartnerId = partner;
+        log = addLog(log, `${state.players.find(p => p.id === partner)?.name} también pierde su turno (enlazados).`);
+      }
     } else {
       log = addLog(log, '¡Dirección invertida!');
       newCurrentPlayerIndex = nextActive(state.currentPlayerIndex, direction);
     }
   } else if (actualCard.value === 'skip') {
-    log = addLog(log, `${state.players[nextIdx]?.name} pierde su turno.`);
+    const skippedPlayer = state.players[nextIdx];
+    log = addLog(log, `${skippedPlayer?.name} pierde su turno.`);
     newCurrentPlayerIndex = nextActive(nextIdx, direction);
+    const partner = getLinkedPartner(skippedPlayer?.id);
+    if (partner) {
+      skipLinkedPartnerId = partner;
+      log = addLog(log, `${state.players.find(p => p.id === partner)?.name} también pierde su turno (enlazados).`);
+    }
   } else if (actualCard.value === 'draw2') {
     const drawTarget = state.players[nextIdx];
     const { drawn, newDrawPile } = takeCards(drawPile, 2);
@@ -2862,9 +2867,9 @@ async function playNormalCard(actualCard, cardIndex, chosenColor = null) {
     lastActivity: firebase.firestore.FieldValue.serverTimestamp()
   };
 
-  const linkedPartnerToSkip = draw2LinkedPartnerId || wild4LinkedPartnerId;
-  if (linkedPartnerToSkip) {
-    update.pendingSkips = [...new Set([...(state.pendingSkips || []), linkedPartnerToSkip])];
+  const partnersToSkip = [draw2LinkedPartnerId, wild4LinkedPartnerId, skipLinkedPartnerId].filter(Boolean);
+  if (partnersToSkip.length) {
+    update.pendingSkips = [...new Set([...(state.pendingSkips || []), ...partnersToSkip])];
   }
 
   update.unoCallRequired = (newHand.length === 1 && !won)
@@ -3098,7 +3103,9 @@ async function backToLobby() {
     log: [],
     prevPlayerNames: roomState.players.map(p => p.name),
     readyVotes: [],
-    players: roomState.players.map(p => ({ ...p, cardCount: 0 }))
+    players: roomState.players.map(p => ({ ...p, cardCount: 0 })),
+    linkedPlayers: firebase.firestore.FieldValue.delete(),
+    pendingSkips: firebase.firestore.FieldValue.delete()
   });
 }
 
@@ -4218,19 +4225,39 @@ async function botPlayCard(state, botId, botName, card, cardIdx) {
   const nextIdx = nextActiveFn(state.currentPlayerIndex, direction);
   let newCurrentPlayerIndex = nextIdx;
   let draw2LinkedPartnerId = null;
+  let skipLinkedPartnerId = null;
+
+  const getBotLinkedPartner = (targetId) => {
+    const lp = state.linkedPlayers;
+    if (!lp?.includes(targetId)) return null;
+    const partnerId = lp[0] === targetId ? lp[1] : lp[0];
+    return state.players.find(p => p.id === partnerId && !p.disconnected) ? partnerId : null;
+  };
 
   if (card.value === 'reverse') {
     direction = -direction;
     if (activeN === 2) {
-      log = addLog(log, `${state.players[nextIdx]?.name} pierde su turno (reversa).`);
+      const skippedPlayer = state.players[nextIdx];
+      log = addLog(log, `${skippedPlayer?.name} pierde su turno (reversa).`);
       newCurrentPlayerIndex = state.currentPlayerIndex;
+      const partner = getBotLinkedPartner(skippedPlayer?.id);
+      if (partner) {
+        skipLinkedPartnerId = partner;
+        log = addLog(log, `${state.players.find(p => p.id === partner)?.name} también pierde su turno (enlazados).`);
+      }
     } else {
       log = addLog(log, '¡Dirección invertida!');
       newCurrentPlayerIndex = nextActiveFn(state.currentPlayerIndex, direction);
     }
   } else if (card.value === 'skip') {
-    log = addLog(log, `${state.players[nextIdx]?.name} pierde su turno.`);
+    const skippedPlayer = state.players[nextIdx];
+    log = addLog(log, `${skippedPlayer?.name} pierde su turno.`);
     newCurrentPlayerIndex = nextActiveFn(nextIdx, direction);
+    const partner = getBotLinkedPartner(skippedPlayer?.id);
+    if (partner) {
+      skipLinkedPartnerId = partner;
+      log = addLog(log, `${state.players.find(p => p.id === partner)?.name} también pierde su turno (enlazados).`);
+    }
   } else if (card.value === 'draw2') {
     const drawTarget = state.players[nextIdx];
     const { drawn, newDrawPile } = takeCards(drawPile, 2);
@@ -4263,8 +4290,9 @@ async function botPlayCard(state, botId, botName, card, cardIdx) {
       : firebase.firestore.FieldValue.delete(),
     log, lastActivity: firebase.firestore.FieldValue.serverTimestamp()
   };
-  if (draw2LinkedPartnerId) {
-    update.pendingSkips = [...new Set([...(state.pendingSkips || []), draw2LinkedPartnerId])];
+  const botPartnersToSkip = [draw2LinkedPartnerId, skipLinkedPartnerId].filter(Boolean);
+  if (botPartnersToSkip.length) {
+    update.pendingSkips = [...new Set([...(state.pendingSkips || []), ...botPartnersToSkip])];
   }
   if (won) { update.status = 'ended'; update.winner = botId; update.winnerName = botName; }
   await db.collection('rooms').doc(currentRoomId).update(update);

@@ -27,7 +27,7 @@ const FIREBASE_CONFIG = {
 const COLORS  = ['red', 'yellow', 'green', 'blue'];
 const NUMBERS = ['1','2','3','4','5','6','7','8','9'];
 const ACTIONS = ['skip','reverse','draw2'];
-const WILDS   = ['wild','wild4','wildPileUp','wildDrawnTogether','wildc4Plus'];
+const WILDS   = ['wild','wild4','wildPileUp','wildDrawnTogether'];
 // UNO Fiesta colored action cards (not wilds)
 const PARTY_CARDS = ['pointTaken'];
 const ALL_VALUES = [...NUMBERS, ...ACTIONS, ...WILDS, ...PARTY_CARDS];
@@ -36,15 +36,15 @@ const VALUE_LABEL = {
   '1':'1','2':'2','3':'3','4':'4',
   '5':'5','6':'6','7':'7','8':'8','9':'9',
   skip:'⊘', reverse:'⇄', draw2:'+2', wild:'C', wild4:'+4',
-  pointTaken:'☝️', wildPileUp:'📚', wildDrawnTogether:'🔗', wildc4Plus:'+4'
+  pointTaken:'☝️', wildPileUp:'📚', wildDrawnTogether:'🔗'
 };
 const CARD_POINTS = {
   '1':1,'2':2,'3':3,'4':4,'5':5,'6':6,'7':7,'8':8,'9':9,
   skip:20, reverse:20, draw2:20, wild:50, wild4:50,
-  pointTaken:20, wildPileUp:50, wildDrawnTogether:50, wildc4Plus:50
+  pointTaken:20, wildPileUp:50, wildDrawnTogether:50
 };
 const COLOR_NAME = { red:'Rojo', yellow:'Amarillo', green:'Verde', blue:'Azul', black:'Comodín' };
-const WILD_LOG_NAME = { wild:'Comodín', wild4:'Comodín +4', wildPileUp:'Comodín Pila 📚', wildDrawnTogether:'Comodín Unión 🔗', wildc4Plus:'Comodín +4 Especial' };
+const WILD_LOG_NAME = { wild:'Comodín', wild4:'Comodín +4', wildPileUp:'Comodín Pila 📚', wildDrawnTogether:'Comodín Unión 🔗' };
 
 // Declared here (not in the Spotify section below) because handleSpotifyCallback()
 // is called from init() before the Spotify section is reached, and const is not hoisted.
@@ -85,7 +85,6 @@ function reverseCenterHTML() {
 function wildCenterHTML(value) {
   let label = '';
   if (value === 'wild4') label = '+4';
-  else if (value === 'wildc4Plus') label = '+4';
   else if (value === 'pointTaken') label = '☝️';
   else if (value === 'wildPileUp') label = '📚';
   else if (value === 'wildDrawnTogether') label = '🔗';
@@ -2285,11 +2284,6 @@ async function selectCard(index) {
     document.getElementById('actual-card-preview').classList.add('hidden');
     renderClaimPicker();
     document.getElementById('claim-dialog').classList.remove('hidden');
-  } else if (card.value === 'wildc4Plus') {
-    document.getElementById('claim-dialog-title').textContent = 'Elige el color para el +4';
-    document.getElementById('actual-card-preview').classList.add('hidden');
-    renderClaimPicker();
-    document.getElementById('claim-dialog').classList.remove('hidden');
   } else {
     document.getElementById('claim-dialog').classList.add('hidden');
     await playNormalCard(card, index);
@@ -2320,7 +2314,7 @@ async function confirmPlay() {
   if (!actualCard) return;
 
   document.getElementById('claim-dialog').classList.add('hidden');
-  if (actualCard.value === 'wild4' || actualCard.value === 'wildc4Plus') {
+  if (actualCard.value === 'wild4') {
     await startWild4Challenge(actualCard, claimColor, selectedCardIdx);
   } else {
     await playNormalCard(actualCard, selectedCardIdx, claimColor);
@@ -2771,7 +2765,7 @@ function renderWild4ChallengeArea(state) {
   } else {
     // Phase 2: cards revealed with verdict
     const handHTML = hand.map(card => {
-      const playable = WILDS.includes(card.value) ||
+      const playable = (WILDS.includes(card.value) && card.value !== 'wild4') ||
         card.color === ch.prevTopColor || card.value === ch.prevTopValue;
       const lbl = VALUE_LABEL[card.value];
       const isWild = WILDS.includes(card.value);
@@ -2784,7 +2778,8 @@ function renderWild4ChallengeArea(state) {
     }).join('');
 
     const altCount = hand.filter(c =>
-      WILDS.includes(c.value) || c.color === ch.prevTopColor || c.value === ch.prevTopValue
+      (WILDS.includes(c.value) && c.value !== 'wild4') ||
+      c.color === ch.prevTopColor || c.value === ch.prevTopValue
     ).length;
 
     const verdictClass = altCount > 0 ? 'invalid' : 'valid';
@@ -2901,8 +2896,9 @@ async function handleWild4Challenge() {
 
   // A card is a valid alternative if it matches the prev top color or value (non-wild),
   // OR is a plain wild (always playable). Wild +4 itself is already gone from the hand.
+  // wild4 is NOT a valid alternative — it carries the same restriction as the card played.
   const alternatives = (ch.chooserHandAtPlay || []).filter(c =>
-    WILDS.includes(c.value) ||
+    (WILDS.includes(c.value) && c.value !== 'wild4') ||
     c.color === ch.prevTopColor ||
     c.value === ch.prevTopValue
   );
@@ -4088,7 +4084,9 @@ async function botWild4ChallengeDecide(state) {
   const botName = ch.targetName;
 
   const alternatives = (ch.chooserHandAtPlay || []).filter(c =>
-    WILDS.includes(c.value) || c.color === ch.prevTopColor || c.value === ch.prevTopValue
+    (WILDS.includes(c.value) && c.value !== 'wild4') ||
+    c.color === ch.prevTopColor ||
+    c.value === ch.prevTopValue
   );
   const challengeWins = alternatives.length > 0;
 
@@ -4279,7 +4277,7 @@ async function botDoTurn(state, botId, botName) {
   } else {
     const pile    = wilds.find(({ card }) => card.value === 'wildPileUp');
     const together = wilds.find(({ card }) => card.value === 'wildDrawnTogether');
-    const w4      = wilds.find(({ card }) => card.value === 'wild4' || card.value === 'wildc4Plus');
+    const w4      = wilds.find(({ card }) => card.value === 'wild4');
     const w       = wilds.find(({ card }) => card.value === 'wild');
     chosen = pile || together || w4 || w || wilds[0];
   }
@@ -4315,8 +4313,8 @@ async function botPlayCard(state, botId, botName, card, cardIdx) {
     return;
   }
 
-  // Wild4 / wildc4Plus → set up challenge for next player (same flow as human)
-  if (card.value === 'wild4' || card.value === 'wildc4Plus') {
+  // Wild4 → set up challenge for next player (same flow as human)
+  if (card.value === 'wild4') {
     const color = botPickColor(myHand);
     const newHands = { ...state.hands, [botId]: newHand };
     const players  = state.players.map(p => p.id === botId ? { ...p, cardCount: newHand.length } : p);

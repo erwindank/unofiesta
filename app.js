@@ -3191,9 +3191,6 @@ async function handleDraw() {
     log,
     lastActivity: firebase.firestore.FieldValue.serverTimestamp()
   };
-  if (drawLinkedPartnerId) {
-    drawUpdate.pendingSkips = [...new Set([...(state.pendingSkips || []), drawLinkedPartnerId])];
-  }
   await db.collection('rooms').doc(currentRoomId).update(drawUpdate);
 }
 
@@ -4572,9 +4569,8 @@ async function botDrawAndPass(state, botId, botName) {
   const newHand = [...(state.hands?.[botId] || []), ...drawn];
   let newHands = { ...state.hands, [botId]: newHand };
 
-  // Linked partner also draws 1 and loses their turn
+  // Linked partner also draws 1 (no turn penalty)
   const linked = state.linkedPlayers;
-  let botDrawSkips = state.pendingSkips ? [...state.pendingSkips] : [];
   let botDrawPartnerId = null;
   if (linked?.includes(botId) && drawn.length > 0) {
     const partnerId = linked[0] === botId ? linked[1] : linked[0];
@@ -4583,7 +4579,6 @@ async function botDrawAndPass(state, botId, botName) {
       const { drawn: pd, newDrawPile: npd } = takeCards(drawPile, 1);
       drawPile = npd;
       newHands = { ...newHands, [partnerId]: [...(newHands[partnerId] || []), ...pd] };
-      if (!botDrawSkips.includes(partnerId)) botDrawSkips.push(partnerId);
       botDrawPartnerId = partnerId;
     }
   }
@@ -4597,12 +4592,10 @@ async function botDrawAndPass(state, botId, botName) {
     }
   }
   log = addLog(log, `${botName} sacó una carta y pasó.`);
-  const botDrawUpdate = {
+  await db.collection('rooms').doc(currentRoomId).update({
     hands: newHands, players, drawPile,
     currentPlayerIndex: nextPlayerIndex(state),
     unoCallRequired: firebase.firestore.FieldValue.delete(),
     log, lastActivity: firebase.firestore.FieldValue.serverTimestamp()
-  };
-  botDrawUpdate.pendingSkips = botDrawSkips.length > 0 ? botDrawSkips : firebase.firestore.FieldValue.delete();
-  await db.collection('rooms').doc(currentRoomId).update(botDrawUpdate);
+  });
 }

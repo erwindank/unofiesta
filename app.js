@@ -3972,7 +3972,7 @@ function scheduleBotTick(state) {
   }
 
   clearTimeout(botTickTimer);
-  const delay = 900 + Math.random() * 600;
+  const delay = 1800 + Math.random() * 1000;
   botTickTimer = setTimeout(() => doBotTick(roomState || state), delay);
 }
 

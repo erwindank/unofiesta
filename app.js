@@ -2456,7 +2456,7 @@ function renderPointTakenOverlay(state) {
     const others = state.players.filter(p => p.id !== localUid && !p.disconnected);
     document.getElementById('pt-targets').innerHTML = others.map(p =>
       `<button class="btn btn-secondary pt-target-btn" onclick="handlePointTakenVote('${p.id}')">
-        👉 ${esc(p.name)}
+        👉 ${esc(p.name)} <span class="pt-card-count">(${p.cardCount ?? 0} cartas)</span>
       </button>`
     ).join('');
   }

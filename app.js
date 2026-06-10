@@ -2408,7 +2408,8 @@ async function handlePointTakenVote(targetId) {
       const { drawn, newDrawPile } = takeCards(drawPile, count);
       drawPile = newDrawPile;
       hands = { ...hands, [p.id]: [...(hands[p.id] || []), ...drawn] };
-      log = addLog(log, `${p.name} fue apuntado ${count} ${count === 1 ? 'vez' : 'veces'} → saca ${count}.`);
+      const pointers = players.filter(pl => newVotes[pl.id] === p.id).map(pl => pl.name);
+      log = addLog(log, `${p.name} fue apuntado ${count} ${count === 1 ? 'vez' : 'veces'} por ${pointers.join(', ')} → saca ${count}.`);
 
       if (linked?.includes(p.id)) {
         const partnerId = linked[0] === p.id ? linked[1] : linked[0];
@@ -4193,7 +4194,8 @@ async function botPointTakenVote(state, bots) {
       const { drawn, newDrawPile } = takeCards(drawPile, count);
       drawPile = newDrawPile;
       hands = { ...hands, [p.id]: [...(hands[p.id] || []), ...drawn] };
-      log = addLog(log, `${p.name} fue apuntado ${count} ${count === 1 ? 'vez' : 'veces'} → saca ${count}.`);
+      const pointers = players.filter(pl => votes[pl.id] === p.id).map(pl => pl.name);
+      log = addLog(log, `${p.name} fue apuntado ${count} ${count === 1 ? 'vez' : 'veces'} por ${pointers.join(', ')} → saca ${count}.`);
 
       if (linked?.includes(p.id)) {
         const partnerId = linked[0] === p.id ? linked[1] : linked[0];

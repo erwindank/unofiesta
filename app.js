@@ -180,6 +180,7 @@ let unoCallClearPending = false;
 let botUnoShoutTimer = null;
 let botUnoShoutForId = null;
 let drawnCardState = null; // { cardIdx, canPlay } — set after drawing, cleared when turn ends
+let drawnLinkedPartnerId = null; // linked partner who also drew when local player drew
 
 // Chat state
 let chatOpen = false;
@@ -3198,19 +3199,12 @@ async function handleDraw() {
   const canPlay = !!(drawnCard && isActualPlayable(drawnCard, state));
   drawnCardState = { cardIdx: newHand.length - 1, canPlay };
 
-  let log = state.log;
-  if (drawLinkedPartnerId) {
-    const partner = state.players.find(p => p.id === drawLinkedPartnerId);
-    if (partner) {
-      log = addLog(log, `${partner.name} también saca 1 carta (enlazados).`);
-    }
-  }
+  drawnLinkedPartnerId = drawLinkedPartnerId || null;
 
   const drawUpdate = {
     hands: newHands,
     drawPile,
     players,
-    log,
     lastActivity: firebase.firestore.FieldValue.serverTimestamp()
   };
   await db.collection('rooms').doc(currentRoomId).update(drawUpdate);
@@ -3223,14 +3217,23 @@ async function handlePassTurn() {
   const hadDrawn = drawnCardState !== null;
   drawnCardState = null;
 
+  const partnerId = drawnLinkedPartnerId;
+  drawnLinkedPartnerId = null;
+
   const logMsg = hadDrawn
     ? `${localName} sacó una carta y pasó.`
     : `${localName} pasó su turno.`;
 
+  let log = addLog(state.log, logMsg);
+  if (partnerId) {
+    const partner = state.players.find(p => p.id === partnerId);
+    if (partner) log = addLog(log, `${partner.name} también saca 1 carta (enlazados).`);
+  }
+
   await db.collection('rooms').doc(currentRoomId).update({
     currentPlayerIndex: nextPlayerIndex(state),
     unoCallRequired: firebase.firestore.FieldValue.delete(),
-    log: addLog(state.log, logMsg),
+    log,
     lastActivity: firebase.firestore.FieldValue.serverTimestamp()
   });
 }
@@ -4604,14 +4607,11 @@ async function botDrawAndPass(state, botId, botName) {
   }
 
   const players = state.players.map(p => ({ ...p, cardCount: (newHands[p.id] || []).length }));
-  let log = state.log;
+  let log = addLog(state.log, `${botName} sacó una carta y pasó.`);
   if (botDrawPartnerId) {
     const partner = state.players.find(p => p.id === botDrawPartnerId);
-    if (partner) {
-      log = addLog(log, `${partner.name} también saca 1 carta (enlazados).`);
-    }
+    if (partner) log = addLog(log, `${partner.name} también saca 1 carta (enlazados).`);
   }
-  log = addLog(log, `${botName} sacó una carta y pasó.`);
   await db.collection('rooms').doc(currentRoomId).update({
     hands: newHands, players, drawPile,
     currentPlayerIndex: nextPlayerIndex(state),

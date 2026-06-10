@@ -178,6 +178,8 @@ let w4cRevealedFor = null;
 let unoAlertTimeout = null;
 let currentUnoCallRequired = null;
 let unoCallClearPending = false;
+let botUnoShoutTimer = null;
+let botUnoShoutForId = null;
 let drawnCardState = null; // { cardIdx, canPlay } — set after drawing, cleared when turn ends
 
 // Chat state
@@ -1048,6 +1050,14 @@ function renderUnoAlert(state) {
   }
 }
 
+function clearBotUnoShoutTimer() {
+  if (botUnoShoutTimer) {
+    clearTimeout(botUnoShoutTimer);
+    botUnoShoutTimer = null;
+    botUnoShoutForId = null;
+  }
+}
+
 function renderUnoCallOverlay(state) {
   const overlay = document.getElementById('uno-call-overlay');
   const req = state.unoCallRequired;
@@ -1055,6 +1065,7 @@ function renderUnoCallOverlay(state) {
   if (!req) {
     overlay.classList.add('hidden');
     currentUnoCallRequired = null;
+    clearBotUnoShoutTimer();
     return;
   }
 
@@ -1062,6 +1073,7 @@ function renderUnoCallOverlay(state) {
   if (!reqPlayer || reqPlayer.cardCount !== 1) {
     overlay.classList.add('hidden');
     currentUnoCallRequired = null;
+    clearBotUnoShoutTimer();
     if (!unoCallClearPending) {
       unoCallClearPending = true;
       db.collection('rooms').doc(currentRoomId).update({
@@ -1069,6 +1081,27 @@ function renderUnoCallOverlay(state) {
       }).catch(() => {}).then(() => { unoCallClearPending = false; });
     }
     return;
+  }
+
+  // For bots: schedule auto-shout UNO after 5 s (gives human a fair catch window)
+  if (isBot(req.playerId) && state.hostId === localUid) {
+    if (botUnoShoutForId !== req.playerId) {
+      clearBotUnoShoutTimer();
+      botUnoShoutForId = req.playerId;
+      const capturedReq = req;
+      botUnoShoutTimer = setTimeout(async () => {
+        botUnoShoutTimer = null;
+        botUnoShoutForId = null;
+        const cur = roomState;
+        if (!cur?.unoCallRequired || cur.unoCallRequired.playerId !== capturedReq.playerId) return;
+        const log = addLog(cur.log, `${capturedReq.playerName} dice ¡UNO! 🎴`);
+        await db.collection('rooms').doc(currentRoomId).update({
+          unoCallRequired: firebase.firestore.FieldValue.delete(),
+          log,
+          lastActivity: firebase.firestore.FieldValue.serverTimestamp()
+        });
+      }, 5000);
+    }
   }
 
   currentUnoCallRequired = req;

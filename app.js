@@ -2944,8 +2944,20 @@ async function handleWild4Challenge() {
     const { drawn, newDrawPile } = takeCards(drawPile, 4);
     drawPile = newDrawPile;
     hands = { ...hands, [ch.chooserId]: [...(hands[ch.chooserId] || []), ...drawn] };
-    players = players.map(p => ({ ...p, cardCount: (hands[p.id] || []).length }));
     log = addLog(log, `${ch.chooserName} sí tenía cartas que podía poner. El Comodín +4 no era válido. ${ch.chooserName} saca 4.`);
+    // Linked partner also draws 4 as penalty
+    const linked = state.linkedPlayers;
+    if (linked?.includes(ch.chooserId)) {
+      const partnerId = linked[0] === ch.chooserId ? linked[1] : linked[0];
+      const partner = players.find(p => p.id === partnerId && !p.disconnected);
+      if (partner) {
+        const { drawn: pd, newDrawPile: npd } = takeCards(drawPile, 4);
+        drawPile = npd;
+        hands = { ...hands, [partnerId]: [...(hands[partnerId] || []), ...pd] };
+        log = addLog(log, `${partner.name} también saca 4 (enlazados).`);
+      }
+    }
+    players = players.map(p => ({ ...p, cardCount: (hands[p.id] || []).length }));
     newCurrentPlayerIndex = ch.targetIndex;
   }
 
@@ -3005,9 +3017,9 @@ async function playNormalCard(actualCard, cardIndex, chosenColor = null) {
 
   let topColor = actualCard.color;
   let topValue = actualCard.value;
-  let log = addLog(state.log,
-    `${localName} jugó ${COLOR_NAME[actualCard.color]} ${VALUE_LABEL[actualCard.value]}.`
-  );
+  const cardLabel = WILD_LOG_NAME[actualCard.value]
+    || `${COLOR_NAME[actualCard.color]} ${VALUE_LABEL[actualCard.value]}`;
+  let log = addLog(state.log, `${localName} jugó ${cardLabel}.`);
 
   const newHands = { ...state.hands, [localUid]: newHand };
   let players = state.players.map(p =>

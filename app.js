@@ -2377,7 +2377,9 @@ async function startPointTakenPhase(card, cardIndex) {
     return;
   }
 
-  update.pointTakenPhase = { triggerPlayerId: localUid, nextPlayerIndex: nextIdx, votes: {} };
+  const ptPhase = { triggerPlayerId: localUid, nextPlayerIndex: nextIdx, votes: {} };
+  if (state.linkedPlayers) ptPhase.linkedPlayers = state.linkedPlayers;
+  update.pointTakenPhase = ptPhase;
   await db.collection('rooms').doc(currentRoomId).update(update);
 }
 
@@ -2405,7 +2407,7 @@ async function handlePointTakenVote(targetId) {
   for (const vid of Object.values(newVotes)) {
     voteCounts[vid] = (voteCounts[vid] || 0) + 1;
   }
-  const linked = state.linkedPlayers;
+  const linked = phase.linkedPlayers;
   const n = players.length;
   for (let i = 0; i < n; i++) {
     const p = players[(phase.nextPlayerIndex + i) % n];
@@ -2523,6 +2525,7 @@ async function startWildPileUp(card, cardIndex) {
   }
 
   update.wildPileUpPhase = { pile, pileColor, holderIndex: nextIdx };
+  update.currentPlayerIndex = nextIdx;
   await db.collection('rooms').doc(currentRoomId).update(update);
 }
 
@@ -2611,7 +2614,6 @@ async function handleTakePile() {
     hands: newHands, players, drawPile,
     topColor: phase.pileColor, topValue: 'wildPileUp',
     wildPileUpPhase: firebase.firestore.FieldValue.delete(),
-    currentPlayerIndex: afterIdx,
     log, lastActivity: firebase.firestore.FieldValue.serverTimestamp()
   };
 
@@ -2960,6 +2962,7 @@ async function handleWild4Accept() {
 
   // Linked partner also draws 4 and skips
   let pendingSkips = state.pendingSkips ? [...state.pendingSkips] : [];
+  let log = addLog(state.log, `${ch.targetName} aceptó el Comodín +4 y sacó 4 cartas.`);
   const linked = state.linkedPlayers;
   if (linked?.includes(localUid)) {
     const partnerId = linked[0] === localUid ? linked[1] : linked[0];
@@ -2969,10 +2972,10 @@ async function handleWild4Accept() {
       drawPile = npd;
       hands = { ...hands, [partnerId]: [...(hands[partnerId] || []), ...pd] };
       if (!pendingSkips.includes(partnerId)) pendingSkips.push(partnerId);
+      log = addLog(log, `${partner.name} también saca 4 (enlazados).`);
     }
   }
   // Echo penalty: if the wild4 chooser is the echoed player, they also draw 4 and skip
-  let echoMsg = '';
   const echo = state.echoPenalty;
   if (echo?.echoedPlayerId === ch.chooserId) {
     const chooserName = state.players.find(p => p.id === ch.chooserId)?.name || ch.chooserName;
@@ -2980,11 +2983,9 @@ async function handleWild4Accept() {
     drawPile = epd;
     hands = { ...hands, [ch.chooserId]: [...(hands[ch.chooserId] || []), ...ed] };
     if (!pendingSkips.includes(ch.chooserId)) pendingSkips.push(ch.chooserId);
-    echoMsg = ` ¡Eco! ${chooserName} también saca 4.`;
+    log = addLog(log, `¡Eco! ${chooserName} también saca 4.`);
   }
   players = players.map(p => ({ ...p, cardCount: (hands[p.id] || []).length }));
-
-  const log = addLog(state.log, `${ch.targetName} aceptó el Comodín +4 y sacó 4 cartas.${echoMsg}`);
   const update = {
     hands, players, drawPile,
     currentPlayerIndex: ch.nextPlayerIndex,
@@ -3065,6 +3066,8 @@ async function handleWild4Challenge() {
         log = addLog(log, `${partner.name} también saca 4 (enlazados).`);
       }
     }
+    // Clear any stale pending skip for the target — they earned their turn back
+    pendingSkips = pendingSkips.filter(id => id !== ch.targetId);
     players = players.map(p => ({ ...p, cardCount: (hands[p.id] || []).length }));
     newCurrentPlayerIndex = ch.targetIndex;
   }
@@ -3302,6 +3305,7 @@ async function handleDraw() {
   const state = roomState;
   if (!isMyTurn(state)) return;
   if (state.wild4Challenge) return;
+  if (state.wildPileUpPhase) return;
   if (drawnCardState !== null) return;
 
   const myHand = state.hands?.[localUid] || [];
@@ -4267,6 +4271,10 @@ async function botWild4ChallengeDecide(state) {
     players = players.map(p => ({ ...p, cardCount: (hands[p.id] || []).length }));
     log = addLog(log, `${botName} desafió el Comodín +4. ${ch.chooserName} sí tenía cartas que podía poner. El Comodín +4 no era válido. ${ch.chooserName} saca 4.`);
     newCurrentPlayerIndex = ch.targetIndex;
+    // Clear any stale pending skip for the bot — it earned its turn back
+    const pendingSkipsAfterChallenge = (state.pendingSkips || []).filter(id => id !== botId);
+    if (pendingSkipsAfterChallenge.length) update.pendingSkips = pendingSkipsAfterChallenge;
+    else update.pendingSkips = firebase.firestore.FieldValue.delete();
   } else {
     // Bot accepts
     const { drawn, newDrawPile } = takeCards(drawPile, 4);
@@ -4282,6 +4290,7 @@ async function botWild4ChallengeDecide(state) {
         drawPile = npd;
         hands = { ...hands, [partnerId]: [...(hands[partnerId] || []), ...pd] };
         if (!pendingSkips.includes(partnerId)) pendingSkips.push(partnerId);
+        log = addLog(log, `${partner.name} también saca 4 (enlazados).`);
       }
     }
     // Echo penalty: if the chooser is the echoed player, they also draw 4 and skip
@@ -4337,7 +4346,7 @@ async function botPointTakenVote(state, bots) {
   const voteCounts = {};
   for (const vid of Object.values(votes)) voteCounts[vid] = (voteCounts[vid] || 0) + 1;
 
-  const linked = state.linkedPlayers;
+  const linked = phase.linkedPlayers;
   const n = players.length;
   for (let i = 0; i < n; i++) {
     const p = players[(phase.nextPlayerIndex + i) % n];
@@ -4404,7 +4413,6 @@ async function botWildPileUpAct(state, botId, botName) {
       hands: newHands, players,
       topColor: phase.pileColor, topValue: 'wildPileUp',
       wildPileUpPhase: firebase.firestore.FieldValue.delete(),
-      currentPlayerIndex: afterIdx,
       log, lastActivity: firebase.firestore.FieldValue.serverTimestamp(),
       drawPile
     });
@@ -4590,6 +4598,7 @@ async function botPlayCard(state, botId, botName, card, cardIdx) {
       players, hands: newHands, drawPile,
       topColor: pileColor, topValue: 'wildPileUp',
       wildPileUpPhase: { pile, pileColor, holderIndex: nextIdx },
+      currentPlayerIndex: nextIdx,
       unoCallRequired: newHand.length === 1
         ? { playerId: botId, playerName: botName }
         : firebase.firestore.FieldValue.delete(),
@@ -4701,7 +4710,7 @@ async function botPlayCard(state, botId, botName, card, cardIdx) {
     const ptUpd = {
       players, hands: newHands,
       topColor: card.color, topValue: 'pointTaken',
-      pointTakenPhase: { triggerPlayerId: botId, nextPlayerIndex: nextIdx, votes: {} },
+      pointTakenPhase: { triggerPlayerId: botId, nextPlayerIndex: nextIdx, votes: {}, ...(state.linkedPlayers ? { linkedPlayers: state.linkedPlayers } : {}) },
       linkedPlayers: firebase.firestore.FieldValue.delete(),
       pendingSkips: firebase.firestore.FieldValue.delete(),
       unoCallRequired: newHand.length === 1

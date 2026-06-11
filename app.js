@@ -4645,8 +4645,8 @@ async function botPlayCard(state, botId, botName, card, cardIdx) {
       return;
     }
 
-    const nonBots = others.filter(p => !isBot(p.id));
-    const linked = (nonBots.length >= 2 ? nonBots : others).slice(0, 2).map(p => p.id);
+    const sortedByCards = [...others].sort((a, b) => a.cardCount - b.cardCount);
+    const linked = sortedByCards.slice(0, 2).map(p => p.id);
     const p1 = state.players.find(p => p.id === linked[0])?.name || '?';
     const p2 = state.players.find(p => p.id === linked[1])?.name || '?';
     const log = addLog(state.log,

@@ -118,6 +118,12 @@ body.calm .hand-area.my-turn { box-shadow: 0 0 0 3px rgba(255,215,0,.8); }
    R2 FACES ON SEATS
    ============================================================ */
 .opponent { position: relative; }
+/* The faces made each seat taller than the opponents strip, and the strip shrank to fit
+   the screen, cutting the seats off. Keep the strip at full height and the seat compact. */
+#opponents-row { flex-shrink: 0; }
+#opponents-row .opponent { gap: .1rem; padding: .3rem .55rem; }
+#opponents-row .seat-face { width: 30px; height: 30px; }
+@media (max-height: 700px) { #opponents-row .seat-face { width: 24px; height: 24px; } }
 .seat-face-wrap { display: inline-flex; line-height: 0; }
 .seat-face { display: block; filter: drop-shadow(0 2px 3px rgba(0,0,0,.4)); }
 .seat-face.face-bluff   { animation: face-shifty 1.6s ease-in-out infinite; }

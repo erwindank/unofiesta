@@ -2929,8 +2929,7 @@ function renderWild4ChallengeArea(state) {
   } else {
     // Phase 2: cards revealed with verdict
     const handHTML = hand.map(card => {
-      const playable = (WILDS.includes(card.value) && card.value !== 'wild4') ||
-        card.color === ch.prevTopColor || card.value === ch.prevTopValue;
+      const playable = isW4Alternative(card, ch);
       const lbl = VALUE_LABEL[card.value];
       const isWild = WILDS.includes(card.value);
       const center = isWild ? wildCenterHTML(card.value)
@@ -2941,10 +2940,7 @@ function renderWild4ChallengeArea(state) {
       </div>`;
     }).join('');
 
-    const altCount = hand.filter(c =>
-      (WILDS.includes(c.value) && c.value !== 'wild4') ||
-      c.color === ch.prevTopColor || c.value === ch.prevTopValue
-    ).length;
+    const altCount = hand.filter(c => isW4Alternative(c, ch)).length;
 
     const verdictClass = altCount > 0 ? 'invalid' : 'valid';
     const verdictText = altCount > 0
@@ -3016,6 +3012,13 @@ async function startWild4Challenge(actualCard, chosenColor, cardIndex) {
   await db.collection('rooms').doc(currentRoomId).update(update);
 }
 
+// Official UNO Party rule: a Wild +4 may only be played when you hold no card of the
+// current colour. Matching numbers/symbols in other colours and plain wilds do NOT make
+// it illegal, so only a card of the previous top colour counts as "could have played".
+function isW4Alternative(card, ch) {
+  return !!card && !WILDS.includes(card.value) && card.color === ch.prevTopColor;
+}
+
 async function handleWild4Accept() {
   const state = roomState;
   const ch = state.wild4Challenge;
@@ -3026,7 +3029,7 @@ async function handleWild4Accept() {
   drawPile = newDrawPile;
   hands = { ...hands, [localUid]: [...(hands[localUid] || []), ...drawn] };
 
-  // Linked partner also draws 4 and skips
+  // Linked partner also draws 4 (official rule: draws only, keeps their turn)
   let pendingSkips = state.pendingSkips ? [...state.pendingSkips] : [];
   let log = addLog(state.log, `${ch.targetName} aceptó el Comodín +4 y sacó 4 cartas.`);
   const linked = state.linkedPlayers;
@@ -3037,7 +3040,6 @@ async function handleWild4Accept() {
       const { drawn: pd, newDrawPile: npd } = takeCards(drawPile, 4);
       drawPile = npd;
       hands = { ...hands, [partnerId]: [...(hands[partnerId] || []), ...pd] };
-      if (!pendingSkips.includes(partnerId)) pendingSkips.push(partnerId);
       log = addLog(log, `${partner.name} también saca 4 (enlazados).`);
     }
   }
@@ -3068,14 +3070,9 @@ async function handleWild4Challenge() {
   const ch = state.wild4Challenge;
   if (!ch || ch.targetId !== localUid) return;
 
-  // A card is a valid alternative if it matches the prev top color or value (non-wild),
-  // OR is a plain wild (always playable). Wild +4 itself is already gone from the hand.
-  // wild4 is NOT a valid alternative — it carries the same restriction as the card played.
-  const alternatives = (ch.chooserHandAtPlay || []).filter(c =>
-    (WILDS.includes(c.value) && c.value !== 'wild4') ||
-    c.color === ch.prevTopColor ||
-    c.value === ch.prevTopValue
-  );
+  // Official UNO Party rule: the +4 was illegal only if the chooser held a card of the
+  // previous colour (see isW4Alternative). Wild +4 itself is already gone from the hand.
+  const alternatives = (ch.chooserHandAtPlay || []).filter(c => isW4Alternative(c, ch));
   const wasValid = alternatives.length === 0;
 
   let { hands, players, drawPile } = state;
@@ -3089,7 +3086,7 @@ async function handleWild4Challenge() {
     drawPile = newDrawPile;
     hands = { ...hands, [localUid]: [...(hands[localUid] || []), ...drawn] };
     log = addLog(log, `${ch.chooserName} no tenía ninguna carta jugable. El Comodín +4 era válido. ${ch.targetName} saca 6 cartas y pierde su turno.`);
-    // Linked partner also draws 6 and skips
+    // Linked partner also draws 6 (official rule: draws only, keeps their turn)
     const linked = state.linkedPlayers;
     if (linked?.includes(localUid)) {
       const partnerId = linked[0] === localUid ? linked[1] : linked[0];
@@ -3098,7 +3095,6 @@ async function handleWild4Challenge() {
         const { drawn: pd, newDrawPile: npd } = takeCards(drawPile, 6);
         drawPile = npd;
         hands = { ...hands, [partnerId]: [...(hands[partnerId] || []), ...pd] };
-        if (!pendingSkips.includes(partnerId)) pendingSkips.push(partnerId);
         log = addLog(log, `${partner.name} también saca 6 (enlazados).`);
       }
     }
@@ -3226,15 +3222,9 @@ async function playNormalCard(actualCard, cardIndex, chosenColor = null) {
 
   const nextIdx = nextActive(state.currentPlayerIndex, direction);
   let newCurrentPlayerIndex = nextIdx;
-  let draw2LinkedPartnerId = null;
-  let skipLinkedPartnerId = null;
-
-  const getLinkedPartner = (targetId) => {
-    const lp = state.linkedPlayers;
-    if (!lp?.includes(targetId)) return null;
-    const partnerId = lp[0] === targetId ? lp[1] : lp[0];
-    return state.players.find(p => p.id === partnerId && !p.disconnected) ? partnerId : null;
-  };
+  // Linked players only share draws (official rule), never lost turns.
+  // echoSkipId = the +2 player hit by their own Echo penalty, who loses their next turn.
+  let echoSkipId = null;
 
   if (actualCard.value === 'reverse') {
     direction = -direction;
@@ -3242,11 +3232,6 @@ async function playNormalCard(actualCard, cardIndex, chosenColor = null) {
       const skippedPlayer = state.players[nextIdx];
       log = addLog(log, `${skippedPlayer?.name} pierde su turno (reversa).`);
       newCurrentPlayerIndex = state.currentPlayerIndex;
-      const partner = getLinkedPartner(skippedPlayer?.id);
-      if (partner) {
-        skipLinkedPartnerId = partner;
-        log = addLog(log, `${state.players.find(p => p.id === partner)?.name} también pierde su turno (enlazados).`);
-      }
     } else {
       log = addLog(log, '¡Dirección invertida!');
       newCurrentPlayerIndex = nextActive(state.currentPlayerIndex, direction);
@@ -3255,18 +3240,13 @@ async function playNormalCard(actualCard, cardIndex, chosenColor = null) {
     const skippedPlayer = state.players[nextIdx];
     log = addLog(log, `${skippedPlayer?.name} pierde su turno.`);
     newCurrentPlayerIndex = nextActive(nextIdx, direction);
-    const partner = getLinkedPartner(skippedPlayer?.id);
-    if (partner) {
-      skipLinkedPartnerId = partner;
-      log = addLog(log, `${state.players.find(p => p.id === partner)?.name} también pierde su turno (enlazados).`);
-    }
   } else if (actualCard.value === 'draw2') {
     const drawTarget = state.players[nextIdx];
     const { drawn, newDrawPile } = takeCards(drawPile, 2);
     drawPile = newDrawPile;
     newHands[drawTarget.id] = [...(newHands[drawTarget.id] || []), ...drawn];
     log = addLog(log, `${drawTarget.name} saca 2 y pierde su turno.`);
-    // Linked partner draws 2 too and loses their turn
+    // Linked partner draws 2 too (official rule: draws only, keeps their turn)
     const linked2 = state.linkedPlayers;
     if (linked2?.includes(drawTarget.id)) {
       const partnerId2 = linked2[0] === drawTarget.id ? linked2[1] : linked2[0];
@@ -3275,7 +3255,6 @@ async function playNormalCard(actualCard, cardIndex, chosenColor = null) {
         const { drawn: pd2, newDrawPile: npd2 } = takeCards(drawPile, 2);
         drawPile = npd2;
         newHands[partnerId2] = [...(newHands[partnerId2] || []), ...pd2];
-        draw2LinkedPartnerId = partnerId2;
         log = addLog(log, `${partner2.name} también saca 2 (enlazados).`);
       }
     }
@@ -3284,7 +3263,7 @@ async function playNormalCard(actualCard, cardIndex, chosenColor = null) {
       const { drawn: ed, newDrawPile: epd } = takeCards(drawPile, 2);
       drawPile = epd;
       newHands[localUid] = [...(newHands[localUid] || []), ...ed];
-      draw2LinkedPartnerId = localUid;
+      echoSkipId = localUid;
       log = addLog(log, `¡Eco! ${localName} también saca 2.`);
     }
     players = players.map(p => ({ ...p, cardCount: (newHands[p.id] || []).length }));
@@ -3303,7 +3282,7 @@ async function playNormalCard(actualCard, cardIndex, chosenColor = null) {
     lastActivity: firebase.firestore.FieldValue.serverTimestamp()
   };
 
-  const partnersToSkip = [draw2LinkedPartnerId, skipLinkedPartnerId].filter(Boolean);
+  const partnersToSkip = [echoSkipId].filter(Boolean);
   if (partnersToSkip.length) {
     update.pendingSkips = [...new Set([...(state.pendingSkips || []), ...partnersToSkip])];
   }
@@ -3394,7 +3373,7 @@ async function handleDraw() {
   drawPile = newDrawPile;
   newHands[localUid] = [...(newHands[localUid] || []), ...drawn];
 
-  // Wild Drawn Together: linked partner also draws 1 and loses their turn
+  // Wild Drawn Together: linked partner also draws 1 (no turn penalty)
   const linked = state.linkedPlayers;
   let drawLinkedPartnerId = null;
   if (linked?.includes(localUid) && drawn.length > 0) {
@@ -4372,11 +4351,7 @@ async function botWild4ChallengeDecide(state) {
   const botId   = ch.targetId;
   const botName = ch.targetName;
 
-  const alternatives = (ch.chooserHandAtPlay || []).filter(c =>
-    (WILDS.includes(c.value) && c.value !== 'wild4') ||
-    c.color === ch.prevTopColor ||
-    c.value === ch.prevTopValue
-  );
+  const alternatives = (ch.chooserHandAtPlay || []).filter(c => isW4Alternative(c, ch));
   // The bot challenges when it would win — easier bots sometimes miss it and accept
   const challengeWins = alternatives.length > 0 && Math.random() < botLevel(state).w4Insight;
 
@@ -4393,6 +4368,19 @@ async function botWild4ChallengeDecide(state) {
     hands = { ...hands, [ch.chooserId]: [...(hands[ch.chooserId] || []), ...drawn] };
     players = players.map(p => ({ ...p, cardCount: (hands[p.id] || []).length }));
     log = addLog(log, `${botName} desafió el Comodín +4. ${ch.chooserName} sí tenía cartas que podía poner. El Comodín +4 no era válido. ${ch.chooserName} saca 4.`);
+    // Linked partner of the chooser also draws 4 as penalty (same as the human challenge path)
+    const linkedCh = state.linkedPlayers;
+    if (linkedCh?.includes(ch.chooserId)) {
+      const partnerId = linkedCh[0] === ch.chooserId ? linkedCh[1] : linkedCh[0];
+      const partner = state.players.find(p => p.id === partnerId && !p.disconnected);
+      if (partner) {
+        const { drawn: pd, newDrawPile: npd } = takeCards(drawPile, 4);
+        drawPile = npd;
+        hands = { ...hands, [partnerId]: [...(hands[partnerId] || []), ...pd] };
+        players = players.map(p => ({ ...p, cardCount: (hands[p.id] || []).length }));
+        log = addLog(log, `${partner.name} también saca 4 (enlazados).`);
+      }
+    }
     newCurrentPlayerIndex = ch.targetIndex;
     // Clear any stale pending skip for the bot — it earned its turn back
     const pendingSkipsAfterChallenge = (state.pendingSkips || []).filter(id => id !== botId);
@@ -4412,7 +4400,6 @@ async function botWild4ChallengeDecide(state) {
         const { drawn: pd, newDrawPile: npd } = takeCards(drawPile, 4);
         drawPile = npd;
         hands = { ...hands, [partnerId]: [...(hands[partnerId] || []), ...pd] };
-        if (!pendingSkips.includes(partnerId)) pendingSkips.push(partnerId);
         log = addLog(log, `${partner.name} también saca 4 (enlazados).`);
       }
     }
@@ -4870,15 +4857,9 @@ async function botPlayCard(state, botId, botName, card, cardIdx) {
 
   const nextIdx = nextActiveFn(state.currentPlayerIndex, direction);
   let newCurrentPlayerIndex = nextIdx;
-  let draw2LinkedPartnerId = null;
-  let skipLinkedPartnerId = null;
-
-  const getBotLinkedPartner = (targetId) => {
-    const lp = state.linkedPlayers;
-    if (!lp?.includes(targetId)) return null;
-    const partnerId = lp[0] === targetId ? lp[1] : lp[0];
-    return state.players.find(p => p.id === partnerId && !p.disconnected) ? partnerId : null;
-  };
+  // Linked players only share draws (official rule), never lost turns.
+  // echoSkipId = the +2 player hit by their own Echo penalty, who loses their next turn.
+  let echoSkipId = null;
 
   if (card.value === 'reverse') {
     direction = -direction;
@@ -4886,11 +4867,6 @@ async function botPlayCard(state, botId, botName, card, cardIdx) {
       const skippedPlayer = state.players[nextIdx];
       log = addLog(log, `${skippedPlayer?.name} pierde su turno (reversa).`);
       newCurrentPlayerIndex = state.currentPlayerIndex;
-      const partner = getBotLinkedPartner(skippedPlayer?.id);
-      if (partner) {
-        skipLinkedPartnerId = partner;
-        log = addLog(log, `${state.players.find(p => p.id === partner)?.name} también pierde su turno (enlazados).`);
-      }
     } else {
       log = addLog(log, '¡Dirección invertida!');
       newCurrentPlayerIndex = nextActiveFn(state.currentPlayerIndex, direction);
@@ -4899,11 +4875,6 @@ async function botPlayCard(state, botId, botName, card, cardIdx) {
     const skippedPlayer = state.players[nextIdx];
     log = addLog(log, `${skippedPlayer?.name} pierde su turno.`);
     newCurrentPlayerIndex = nextActiveFn(nextIdx, direction);
-    const partner = getBotLinkedPartner(skippedPlayer?.id);
-    if (partner) {
-      skipLinkedPartnerId = partner;
-      log = addLog(log, `${state.players.find(p => p.id === partner)?.name} también pierde su turno (enlazados).`);
-    }
   } else if (card.value === 'draw2') {
     const drawTarget = state.players[nextIdx];
     const { drawn, newDrawPile } = takeCards(drawPile, 2);
@@ -4918,7 +4889,6 @@ async function botPlayCard(state, botId, botName, card, cardIdx) {
         const { drawn: pd2, newDrawPile: npd2 } = takeCards(drawPile, 2);
         drawPile = npd2;
         newHands[partnerId2] = [...(newHands[partnerId2] || []), ...pd2];
-        draw2LinkedPartnerId = partnerId2;
         log = addLog(log, `${partner2.name} también saca 2 (enlazados).`);
       }
     }
@@ -4927,7 +4897,7 @@ async function botPlayCard(state, botId, botName, card, cardIdx) {
       const { drawn: ed, newDrawPile: epd } = takeCards(drawPile, 2);
       drawPile = epd;
       newHands[botId] = [...(newHands[botId] || []), ...ed];
-      draw2LinkedPartnerId = botId;
+      echoSkipId = botId;
       log = addLog(log, `¡Eco! ${botName} también saca 2.`);
     }
     players = players.map(p => ({ ...p, cardCount: (newHands[p.id] || []).length }));
@@ -4944,7 +4914,7 @@ async function botPlayCard(state, botId, botName, card, cardIdx) {
       : firebase.firestore.FieldValue.delete(),
     log, lastActivity: firebase.firestore.FieldValue.serverTimestamp()
   };
-  const botPartnersToSkip = [draw2LinkedPartnerId, skipLinkedPartnerId].filter(Boolean);
+  const botPartnersToSkip = [echoSkipId].filter(Boolean);
   if (botPartnersToSkip.length) {
     update.pendingSkips = [...new Set([...(state.pendingSkips || []), ...botPartnersToSkip])];
   }

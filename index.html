@@ -2,13 +2,22 @@
 <html lang="es">
 <head>
   <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, viewport-fit=cover">
   <title>UNO Fiesta</title>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Oswald:wght@700&display=swap" rel="stylesheet">
+  <link href="https://fonts.googleapis.com/css2?family=Oswald:wght@600;700&display=swap" rel="stylesheet">
   <link rel="icon" type="image/svg+xml" href="favicon.svg">
-  <link rel="stylesheet" href="style.css">
+  <!-- Install as an app (Y2) -->
+  <link rel="manifest" href="manifest.webmanifest">
+  <link rel="apple-touch-icon" href="apple-touch-icon.png">
+  <meta name="theme-color" content="#07101f">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="apple-mobile-web-app-title" content="UNO Fiesta">
+  <link rel="stylesheet" href="style.css?v=2">
+  <link rel="stylesheet" href="extras.css?v=1">
   <script src="https://cdn.jsdelivr.net/npm/emoji-mart@5/dist/browser.js"></script>
 </head>
 <body>
@@ -16,13 +25,15 @@
 <!-- LANDING -->
 <div id="screen-landing" class="screen active">
   <div class="landing-card">
+    <!-- Y6: language switch -->
+    <div class="landing-lang"><span class="lang-switch"><button type="button" class="lang-btn" data-lang="es" onclick="setLanguage('es')">ES</button><button type="button" class="lang-btn" data-lang="en" onclick="setLanguage('en')">EN</button></span></div>
     <h1 class="game-title"><span class="title-uno">UNO</span><span class="title-party">FIESTA</span></h1>
-    <p class="tagline">¡La fiesta de UNO con cartas especiales!</p>
+    <p class="tagline" data-i18n="land.tagline">¡La fiesta de UNO con cartas especiales!</p>
     <div class="rules-card">
-      <h2>Cómo jugar</h2>
-      <p>Juega cartas que coincidan en <strong>color, número o símbolo</strong> con la carta en el descarte. Si no puedes jugar, roba una carta del mazo. Cuando te quede una sola carta, grita <strong>¡UNO!</strong></p>
-      <p>En UNO Fiesta hay cartas especiales que hacen la partida más impredecible:</p>
-      <ul>
+      <h2 data-i18n="land.howTitle">Cómo jugar</h2>
+      <p data-i18n="land.how1">Juega cartas que coincidan en <strong>color, número o símbolo</strong> con la carta en el descarte. Si no puedes jugar, roba una carta del mazo. Cuando te quede una sola carta, grita <strong>¡UNO!</strong></p>
+      <p data-i18n="land.how2">En UNO Fiesta hay cartas especiales que hacen la partida más impredecible:</p>
+      <ul data-i18n="land.how3">
         <li><strong>Toma Dos, Reversa, Salto y Comodín</strong>: estas son las cartas comunes de UNO; roba 2 y pierde turno, cambia dirección, salta el siguiente turno, o elige color.</li>
         <li><strong>Jugadas Veloces</strong>: si tienes una carta numérica del mismo número y color, puedes jugarla fuera de turno para saltarte a los demás y continuar rápidamente.</li>
         <li><strong>Comodín +4</strong>: solo puede jugarse si no tienes otra carta válida. Si alguien te acusa, debes demostrar que no tenías otra opción.</li>
@@ -30,45 +41,52 @@
         <li><strong>Comodín Pila Salvaje</strong>: crea una mini-pila sorpresa que el siguiente jugador debe seguir.</li>
         <li><strong>Comodín de Enlace</strong>: enlaza a dos jugadores para que roben juntos.</li>
       </ul>
-      <p>Gana quien se quede sin cartas primero. Si quieres jugar con puntaje, suma los valores en la mano de tus oponentes al final de cada ronda.</p>
+      <p data-i18n="land.how4">Gana quien se quede sin cartas primero. Si quieres jugar con puntaje, suma los valores en la mano de tus oponentes al final de cada ronda.</p>
+      <button type="button" class="link-btn" onclick="openRules()" data-i18n="land.allRules">Ver todas las reglas →</button>
     </div>
+    <!-- G7: guided first game (tutorial.js fills in the text) -->
+    <button type="button" id="tutorial-link" class="btn tutorial-link" onclick="startTutorial()">🎓 ¿Primera vez? Aprende jugando (2 min)</button>
     <div class="name-emoji-area">
       <div class="name-input-row">
-        <button type="button" id="emoji-trigger-btn" class="emoji-trigger" onclick="toggleEmojiPicker(event)" title="Elige un emoji"><span class="emoji-face">🙂</span><span class="emoji-clear">×</span></button>
-        <input type="text" id="player-name" placeholder="Tu nombre" maxlength="16" autocomplete="off">
+        <button type="button" id="emoji-trigger-btn" class="emoji-trigger" onclick="toggleEmojiPicker(event)" title="Elige un emoji" data-i18n-title="land.emoji"><span class="emoji-face">🙂</span><span class="emoji-clear">×</span></button>
+        <input type="text" id="player-name" placeholder="Tu nombre" data-i18n-ph="land.name" maxlength="16" autocomplete="off">
       </div>
       <div id="emoji-picker-wrap" class="emoji-picker-wrap hidden"></div>
     </div>
     <div class="btn-group">
-      <button class="btn btn-primary" id="create-btn" onclick="handleCreate()">Crear sala</button>
-      <button class="btn btn-secondary" onclick="showJoin()">Unirse con código</button>
+      <button class="btn btn-primary" id="create-btn" onclick="handleCreate()" data-i18n="land.create">Crear sala</button>
+      <button class="btn btn-secondary" onclick="showJoin()" data-i18n="land.joinCode">Unirse con código</button>
     </div>
     <div id="join-form" class="hidden" style="display:flex;flex-direction:column;gap:.75rem">
-      <input type="text" id="room-code-input" placeholder="Código de sala (p.ej. XK7M2P)" maxlength="6"
+      <input type="text" id="room-code-input" placeholder="Código de sala (p.ej. XK7M2P)" data-i18n-ph="land.codePh" maxlength="6"
         autocomplete="off" oninput="this.value=this.value.toUpperCase()">
-      <button class="btn btn-primary" onclick="handleJoin()">Unirse</button>
+      <button class="btn btn-primary" onclick="handleJoin()" data-i18n="land.join">Unirse</button>
     </div>
+    <!-- G1: one tap into a game against 3 bots -->
+    <button class="btn btn-bots-quick" id="quick-bots-btn" onclick="handleQuickBots()">🤖 <span data-i18n="land.bots">Jugar contra bots</span></button>
     <div id="landing-error" class="error hidden"></div>
-    <p class="muted" style="font-size:.75rem;text-align:center">Hasta 10 jugadores · No se necesita cuenta</p>
+    <p class="muted" style="font-size:.75rem;text-align:center" data-i18n="land.players">Hasta 10 jugadores · No se necesita cuenta</p>
+    <!-- G5: my stats and badges -->
+    <button type="button" class="link-btn stats-link" onclick="openMyStats()">🏅 <span data-i18n="stats.open">Tus estadísticas e insignias</span><span id="stats-link-count"></span></button>
   </div>
 </div>
 
 <!-- LOBBY -->
 <div id="screen-lobby" class="screen">
   <div class="lobby-card">
-    <h2>Sala de espera</h2>
+    <h2 data-i18n="lob.title">Sala de espera</h2>
     <div class="room-code-display">
-      <span>Código:</span>
+      <span data-i18n="lob.code">Código:</span>
       <span id="lobby-code" class="room-code"></span>
-      <button class="btn-copy" onclick="copyCode()">Copiar</button>
+      <button class="btn-copy" onclick="copyCode()" data-i18n="ui.copy">Copiar</button>
     </div>
     <div id="player-list" class="player-list"></div>
     <div class="lobby-actions">
       <button id="start-btn" class="btn btn-primary hidden" onclick="handleStart()">Iniciar partida</button>
-      <p id="waiting-msg" class="muted">Esperando al anfitrión…</p>
-      <button class="btn btn-ghost btn-sm" onclick="handleLeaveLobby()">Salir de la sala</button>
+      <p id="waiting-msg" class="muted" data-i18n="lob.waitHost">Esperando al anfitrión…</p>
+      <button class="btn btn-ghost btn-sm" onclick="handleLeaveLobby()" data-i18n="lob.leave">Salir de la sala</button>
     </div>
-    <p class="muted" style="font-size:.75rem;text-align:center">Comparte el código con amigos para unirse</p>
+    <p class="muted" style="font-size:.75rem;text-align:center" data-i18n="lob.share">Comparte el código con amigos para unirse</p>
   </div>
 </div>
 
@@ -80,22 +98,44 @@
     <span id="end-vote-status" class="end-vote-status"></span>
     <div id="now-playing-carousel" class="now-playing-carousel hidden"></div>
     <div class="game-topbar-actions">
-      <button class="game-room-code" id="game-room-code" onclick="copyGameCode(this)" title="Copiar código">
+      <button class="game-room-code" id="game-room-code" onclick="copyGameCode(this)" title="Copiar código" data-i18n-title="g.copyCode">
         <span id="game-room-code-text"></span>
         <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
       </button>
-      <button class="btn btn-ghost btn-sm" id="end-game-btn" onclick="handleEndGameVote()">Terminar</button>
-      <button class="btn btn-ghost btn-sm btn-notif" id="notif-toggle-btn" onclick="toggleNotifications()" title="Activar notificaciones">🔕</button>
+      <button class="btn btn-ghost btn-sm" onclick="openRules()" title="Reglas" data-i18n-title="g.rules">📖</button>
+      <button class="btn btn-ghost btn-sm btn-voice" id="voice-toggle-btn" onclick="toggleVoice()" title="Unirse al chat de voz">🎤</button>
+      <button class="btn btn-ghost btn-sm btn-chat" id="chat-toggle-btn" onclick="toggleChat()" title="Chat" data-i18n-title="g.chat">💬<span id="chat-unread" class="chat-unread hidden">0</span></button>
+
+      <!-- Settings menu (idea B6): everything else lives here, nothing was removed.
+           Each row is clickable as a whole; the buttons keep their old ids so the
+           existing update functions (music, Spotify, Last.fm…) still work. -->
+      <div class="menu-wrap">
+        <button class="btn btn-ghost btn-sm btn-menu" id="menu-btn" onclick="toggleGameMenu(event)" title="Ajustes" data-i18n-title="menu.title" aria-haspopup="true" aria-expanded="false">⚙️<span id="menu-dot" class="menu-dot hidden"></span></button>
+        <div id="game-menu" class="game-menu hidden" role="menu">
+          <div class="menu-section" data-i18n="menu.game">Partida</div>
+          <div class="menu-row"><button class="btn btn-ghost btn-sm" id="end-game-btn" onclick="handleEndGameVote()">Terminar</button><span class="menu-label" data-i18n="menu.end">Votar para terminar la partida</span></div>
+          <div class="menu-section" data-i18n="menu.sound">Sonido</div>
+          <div class="menu-row"><button class="btn btn-ghost btn-sm btn-music" id="music-toggle-btn" onclick="toggleMusic()" title="Música">🎵</button><span class="menu-label" data-i18n="menu.music">Música de fondo</span></div>
+          <div class="menu-row"><button class="menu-switch" id="sfx-toggle-btn" onclick="toggleFxPref('sfx')" aria-pressed="true"></button><span class="menu-label" data-i18n="menu.sfx">Efectos de sonido</span></div>
+          <div class="menu-row menu-row-slider"><span class="menu-icon">🔊</span><input type="range" id="sfx-volume" min="0" max="100" step="5" aria-label="Volumen" oninput="setFxVolume(this.value)"><span class="menu-label" data-i18n="menu.volume">Volumen</span></div>
+          <div class="menu-row"><button class="btn btn-ghost btn-sm btn-notif" id="notif-toggle-btn" onclick="toggleNotifications()" title="Activar notificaciones">🔕</button><span class="menu-label" data-i18n="menu.notif">Avisos cuando es tu turno</span></div>
+          <div class="menu-section" data-i18n="menu.shared">Música compartida</div>
+          <div class="menu-row">
       <button class="btn btn-ghost btn-sm btn-spotify" id="spotify-btn" onclick="openSpotifyModal()" title="Spotify">
         <svg viewBox="0 0 24 24" width="14" height="14" fill="currentColor"><path d="M12 0C5.4 0 0 5.4 0 12s5.4 12 12 12 12-5.4 12-12S18.66 0 12 0zm5.521 17.34c-.24.359-.66.48-1.021.24-2.82-1.74-6.36-2.101-10.561-1.141-.418.122-.779-.179-.899-.539-.12-.421.18-.78.54-.9 4.56-1.021 8.52-.6 11.64 1.32.42.18.479.659.301 1.02zm1.44-3.3c-.301.42-.841.6-1.262.3-3.239-1.98-8.159-2.58-11.939-1.38-.479.12-1.02-.12-1.14-.6-.12-.48.12-1.021.6-1.141C9.6 9.9 15 10.561 18.72 12.84c.361.181.54.78.241 1.2zm.12-3.36C15.24 8.4 8.82 8.16 5.16 9.301c-.6.179-1.2-.181-1.38-.721-.18-.601.18-1.2.72-1.381 4.26-1.26 11.28-1.02 15.721 1.621.539.3.719 1.02.419 1.56-.299.421-1.02.599-1.559.3z"/></svg>
-      </button>
+      </button><span class="menu-label">Spotify</span></div>
+          <div class="menu-row">
 <button class="btn btn-ghost btn-sm btn-lastfm" id="lastfm-btn" onclick="openLastfmModal()" title="Conectar Last.fm">
         <svg viewBox="0 0 24 24" width="13" height="13" fill="currentColor"><path d="M10.584 17.21l-.88-2.392s-1.43 1.594-3.573 1.594c-1.897 0-3.244-1.649-3.244-4.288 0-3.382 1.704-4.591 3.381-4.591 2.42 0 3.189 1.567 3.849 3.574l.88 2.749c.88 2.666 2.529 4.81 7.285 4.81 3.409 0 5.718-1.044 5.718-3.793 0-2.227-1.265-3.381-3.63-3.931l-1.758-.385c-1.21-.275-1.567-.77-1.567-1.595 0-.934.742-1.484 1.952-1.484 1.32 0 2.034.495 2.144 1.677l2.749-.33c-.22-2.474-1.924-3.492-4.729-3.492-2.474 0-4.893.935-4.893 3.932 0 1.87.907 3.051 3.189 3.601l1.87.44c1.402.33 1.869.907 1.869 1.704 0 1.017-.99 1.43-2.86 1.43-2.776 0-3.93-1.457-4.59-3.464l-.907-2.75c-1.155-3.573-2.997-4.893-6.653-4.893C2.144 5.333 0 7.89 0 12.233c0 4.18 2.144 6.434 5.993 6.434 3.106 0 4.591-1.457 4.591-1.457z"/></svg>
-      </button>
-      <button class="btn btn-ghost btn-sm btn-music" id="music-toggle-btn" onclick="toggleMusic()" title="Música">🎵</button>
-      <button class="btn btn-ghost btn-sm btn-voice" id="voice-toggle-btn" onclick="toggleVoice()" title="Unirse al chat de voz">🎤</button>
-      <button class="btn btn-ghost btn-sm btn-chat" id="chat-toggle-btn" onclick="toggleChat()" title="Chat">💬<span id="chat-unread" class="chat-unread hidden">0</span></button>
-      <button class="btn btn-danger btn-sm" onclick="handleLeaveGame()">Salir</button>
+      </button><span class="menu-label">Last.fm</span></div>
+          <div class="menu-section" data-i18n="menu.screen">Pantalla</div>
+          <div class="menu-row"><button class="menu-switch" id="vibrate-toggle-btn" onclick="toggleFxPref('vibrate')" aria-pressed="true"></button><span class="menu-label" data-i18n="menu.vibrate">Vibración</span></div>
+          <div class="menu-row"><button class="menu-switch" id="calm-toggle-btn" onclick="toggleFxPref('calm')" aria-pressed="false"></button><span class="menu-label" data-i18n="menu.calm">Modo calma (menos movimiento)</span></div>
+          <div class="menu-row"><button class="menu-switch" id="colorblind-toggle-btn" onclick="toggleFxPref('colorblind')" aria-pressed="false"></button><span class="menu-label" data-i18n="menu.colorblind">Símbolos para daltónicos</span></div>
+          <div class="menu-row"><span class="lang-switch"><button type="button" class="lang-btn" data-lang="es" onclick="setLanguage('es')">ES</button><button type="button" class="lang-btn" data-lang="en" onclick="setLanguage('en')">EN</button></span><span class="menu-label" data-i18n="menu.lang">Idioma</span></div>
+        </div>
+      </div>
+      <button class="btn btn-danger btn-sm" id="leave-game-btn" onclick="handleLeaveGame()" data-i18n="g.leave">Salir</button>
     </div>
   </div>
 
@@ -109,7 +149,7 @@
       <div class="pile-area">
         <div class="pile draw-pile" id="draw-pile-area" onclick="handleDraw()">
           <div class="card-back"><span class="back-uno">UNO</span><span class="back-party">FIESTA</span></div>
-          <span class="pile-label">Robar</span>
+          <span class="pile-label" data-i18n="g.drawPile">Robar</span>
         </div>
         <div class="pile discard-pile">
           <div id="top-card" class="card red">
@@ -117,11 +157,11 @@
             <span class="card-label center">?</span>
             <span class="card-label br">?</span>
           </div>
-          <span class="pile-label">Descarte</span>
+          <span class="pile-label" data-i18n="g.discardPile">Descarte</span>
         </div>
       </div>
       <div class="turn-actions">
-        <button id="pass-btn" class="btn btn-secondary hidden" onclick="handlePassTurn()">Pasar turno</button>
+        <button id="pass-btn" class="btn btn-secondary hidden" onclick="handlePassTurn()" data-i18n="g.pass">Pasar turno</button>
       </div>
       <div id="game-status" class="game-status"></div>
     </div>
@@ -145,7 +185,7 @@
   <div class="hand-area">
     <div style="display:flex;align-items:center;justify-content:space-between">
       <div id="hand-label" class="hand-label">Tu mano</div>
-      <button id="uno-btn" class="btn btn-uno hidden" onclick="callUno()">¡UNO!</button>
+      <button id="uno-btn" class="btn btn-uno hidden" onclick="callUno()" data-i18n="fx.uno">¡UNO!</button>
     </div>
     <div id="turn-order-info" class="turn-order-info hidden"></div>
     <div id="player-hand" class="player-hand"></div>
@@ -159,14 +199,14 @@
     <p id="winner-name" class="winner-name"></p>
     <div id="winner-standings" class="winner-standings hidden"></div>
     <div class="winner-actions">
-      <button class="btn btn-primary" onclick="backToLobby()">Jugar de nuevo</button>
-      <button class="btn btn-secondary" onclick="showJoinAnother()">Unirse a otra sala</button>
-      <button class="btn btn-ghost" onclick="returnToMain()">Volver al inicio</button>
+      <button class="btn btn-primary" onclick="backToLobby()" data-i18n="w.again">Jugar de nuevo</button>
+      <button class="btn btn-secondary" onclick="showJoinAnother()" data-i18n="w.other">Unirse a otra sala</button>
+      <button class="btn btn-ghost" onclick="returnToMain()" data-i18n="tut.home">Volver al inicio</button>
     </div>
     <div id="join-another-form" class="join-another-form hidden">
-      <input type="text" id="winner-room-code" placeholder="Código de sala (p.ej. XK7M2P)" maxlength="6"
+      <input type="text" id="winner-room-code" placeholder="Código de sala (p.ej. XK7M2P)" data-i18n-ph="land.codePh" maxlength="6"
         autocomplete="off" oninput="this.value=this.value.toUpperCase()">
-      <button class="btn btn-primary" onclick="handleJoinAnother()">Unirse</button>
+      <button class="btn btn-primary" onclick="handleJoinAnother()" data-i18n="land.join">Unirse</button>
     </div>
     <div id="winner-error" class="error hidden"></div>
   </div>
@@ -175,7 +215,7 @@
 <!-- Chat Panel -->
 <div id="chat-panel" class="chat-panel hidden">
   <div class="chat-header">
-    <span>Chat</span>
+    <span data-i18n="g.chat">Chat</span>
     <button class="chat-close" onclick="toggleChat()">×</button>
   </div>
   <div id="chat-players" class="chat-players"></div>
@@ -191,7 +231,7 @@
     <button class="chat-emote-btn" onclick="sendEmote('🤡')">🤡</button>
   </div>
   <div class="chat-input-row">
-    <input type="text" id="chat-input" placeholder="Mensaje…" maxlength="100" autocomplete="off" onkeydown="handleChatKeydown(event)">
+    <input type="text" id="chat-input" placeholder="Mensaje…" data-i18n-ph="chat.ph" maxlength="100" autocomplete="off" onkeydown="handleChatKeydown(event)">
     <button class="btn btn-primary btn-sm" onclick="handleChatSend()">→</button>
   </div>
 </div>
@@ -207,8 +247,8 @@
       <div id="claim-color-picker" class="claim-color-picker"></div>
     </div>
     <div class="claim-btns">
-      <button class="btn btn-ghost" onclick="cancelPlay()">Cancelar</button>
-      <button class="btn btn-primary" onclick="confirmPlay()">Jugar carta</button>
+      <button class="btn btn-ghost" onclick="cancelPlay()" data-i18n="ui.cancel">Cancelar</button>
+      <button class="btn btn-primary" onclick="confirmPlay()" data-i18n="g.playCard">Jugar carta</button>
     </div>
   </div>
 </div>
@@ -233,6 +273,34 @@
   </div>
 </div>
 
+<!-- Rules (B6) -->
+<div id="rules-modal" class="spotify-modal hidden" onclick="rulesBackdropClick(event)">
+  <div class="spotify-modal-card rules-modal-card">
+    <h3 class="spotify-modal-title" data-i18n="rules.title">📖 Reglas de UNO Fiesta</h3>
+    <div class="rules-body">
+      <h4 data-i18n="rules.goalT">Objetivo</h4>
+      <p data-i18n="rules.goal">Quedarte sin cartas antes que nadie. Cada carta debe coincidir en <strong>color</strong> o <strong>número/símbolo</strong> con la del descarte, o ser un comodín.</p>
+      <h4 data-i18n="rules.basicT">Cartas de siempre</h4>
+      <p data-i18n="rules.basic"><strong>+2</strong> el siguiente roba 2 y pierde su turno · <strong>⊘</strong> salto · <strong>⇄</strong> reversa (con 2 jugadores funciona como salto) · <strong>Comodín</strong> eliges el color.</p>
+      <h4 data-i18n="rules.w4T">Comodín +4</h4>
+      <p data-i18n="rules.w4">Solo si no tienes otra carta que jugar. El siguiente elige: <strong>aceptar</strong> (roba 4) o <strong>desafiar</strong>. Si quien lo jugó tenía otra carta válida, roba 4 él; si no, el que desafió roba 6 y pierde su turno.</p>
+      <h4 data-i18n="rules.ptT">☝️ Apunta y Toma</h4>
+      <p data-i18n="rules.pt">Todos señalan a un jugador. Cada uno roba una carta por cada vez que lo señalaron (máximo 5).</p>
+      <h4 data-i18n="rules.puT">📚 Pila Salvaje</h4>
+      <p data-i18n="rules.pu">Crea una mini-pila de un color. Quien la tenga debe jugar encima una carta de ese color… o llevarse toda la pila.</p>
+      <h4 data-i18n="rules.dtT">🔗 Comodín de Enlace</h4>
+      <p data-i18n="rules.dt">Enlaza a dos jugadores: cuando uno roba o pierde turno, el otro también. Con 2 jugadores se convierte en <strong>Eco</strong>: un +2/+4 que te jueguen también lo roba quien lo jugó. Apunta y Toma rompe el enlace.</p>
+      <h4 data-i18n="rules.speedT">⚡ Jugada veloz</h4>
+      <p data-i18n="rules.speed">Una carta de número exactamente igual (mismo color y número) que la del descarte se puede jugar aunque no sea tu turno.</p>
+      <h4 data-i18n="rules.unoT">¡UNO!</h4>
+      <p data-i18n="rules.uno">Cuando te quede una carta, grita <strong>¡UNO!</strong>. Si alguien te lo grita antes, robas 2.</p>
+      <h4 data-i18n="rules.hereT">Cómo jugar aquí</h4>
+      <p data-i18n="rules.here">En tu turno cada carta muestra <strong>✓</strong> si se puede jugar y <strong>✕</strong> si no. Mantén pulsada una carta para verla en grande con su regla. Toca a otro jugador para lanzarle algo.</p>
+    </div>
+    <div class="spotify-modal-btns"><button class="btn btn-primary btn-sm" onclick="closeRules()" data-i18n="rules.ok">Entendido</button></div>
+  </div>
+</div>
+
 <!-- Voice toast -->
 <div id="voice-toast" class="voice-toast hidden"></div>
 
@@ -240,11 +308,11 @@
 <div id="music-prompt" class="music-prompt hidden">
   <div class="music-prompt-card">
     <div class="music-prompt-icon">🎵</div>
-    <h3 class="music-prompt-title">¿Con música de fondo?</h3>
-    <p class="music-prompt-desc">Añade ambiente a la partida</p>
+    <h3 class="music-prompt-title" data-i18n="mp.title">¿Con música de fondo?</h3>
+    <p class="music-prompt-desc" data-i18n="mp.desc">Añade ambiente a la partida</p>
     <div class="music-prompt-btns">
-      <button class="btn btn-primary" onclick="enableMusic()">Sí, con música</button>
-      <button class="btn btn-ghost" onclick="disableMusic()">Sin música</button>
+      <button class="btn btn-primary" onclick="enableMusic()" data-i18n="mp.yes">Sí, con música</button>
+      <button class="btn btn-ghost" onclick="disableMusic()" data-i18n="mp.no">Sin música</button>
     </div>
   </div>
 </div>
@@ -262,8 +330,8 @@
 <!-- Point Taken Overlay -->
 <div id="point-taken-overlay" class="pt-overlay hidden">
   <div class="pt-inner">
-    <div class="pt-title">☝️ ¡Carta Apunta y Toma!</div>
-    <p class="pt-subtitle">Señala a alguien — el que reciba más señales roba cartas</p>
+    <div class="pt-title" data-i18n="pt.title">☝️ ¡Carta Apunta y Toma!</div>
+    <p class="pt-subtitle" data-i18n="pt.sub">Señala a alguien — el que reciba más señales roba cartas</p>
     <div id="pt-targets" class="pt-targets"></div>
     <div id="pt-voted" class="pt-voted hidden"></div>
     <div id="pt-wait-msg" class="pt-wait"></div>
@@ -276,21 +344,21 @@
     <div id="pu-title" class="pu-title"></div>
     <div id="pu-holder" class="pu-holder"></div>
     <div id="pu-cards" class="pu-cards"></div>
-    <button id="pu-take-btn" class="btn btn-danger hidden" onclick="handleTakePile()">Tomar la mini-pila</button>
+    <button id="pu-take-btn" class="btn btn-danger hidden" onclick="handleTakePile()" data-i18n="pu.take">Tomar la mini-pila</button>
   </div>
 </div>
 
 <!-- Wild Drawn Together Dialog -->
 <div id="drawn-together-dialog" class="claim-dialog hidden">
   <div class="claim-dialog-inner">
-    <h3 id="dt-title">⬌ Comodín de Enlace — Elige 2 jugadores a enlazar</h3>
-    <p id="dt-echo-desc" class="hidden" style="font-size:.85rem;color:var(--muted);margin:.25rem 0 .5rem">¡Modo Eco activado! Si tu rival te juega un +2 o +4, también sacará las mismas cartas.</p>
+    <h3 id="dt-title" data-i18n="dt.title">⬌ Comodín de Enlace — Elige 2 jugadores a enlazar</h3>
+    <p id="dt-echo-desc" data-i18n="dt.echo" class="hidden" style="font-size:.85rem;color:var(--muted);margin:.25rem 0 .5rem">¡Modo Eco activado! Si tu rival te juega un +2 o +4, también sacará las mismas cartas.</p>
     <div id="dt-players" class="dt-players"></div>
-    <div class="dt-section-label">Elige el color:</div>
+    <div class="dt-section-label" data-i18n="dt.color">Elige el color:</div>
     <div id="dt-color-picker" class="claim-color-picker"></div>
     <div class="claim-btns">
-      <button class="btn btn-ghost" onclick="cancelDrawnTogether()">Cancelar</button>
-      <button class="btn btn-primary" id="dt-confirm-btn" onclick="confirmDrawnTogether()" disabled>Enlazar</button>
+      <button class="btn btn-ghost" onclick="cancelDrawnTogether()" data-i18n="ui.cancel">Cancelar</button>
+      <button class="btn btn-primary" id="dt-confirm-btn" onclick="confirmDrawnTogether()" disabled data-i18n="dt.ok">Enlazar</button>
     </div>
   </div>
 </div>
@@ -300,6 +368,10 @@
 <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-auth-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-database-compat.js"></script>
-<script src="app.js"></script>
+<script src="i18n.js?v=3"></script>
+<script src="fx.js?v=1"></script>
+<script src="app.js?v=5"></script>
+<script src="extras.js?v=2"></script>
+<script src="tutorial.js?v=2"></script>
 </body>
 </html>

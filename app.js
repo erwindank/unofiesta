@@ -274,6 +274,9 @@ async function init() {
   } else if (musicEnabled === null && !savedRoom) {
     setTimeout(showMusicPrompt, 700);
   }
+
+  // Invite links (?sala=CODE) — extras.js
+  if (typeof handleInviteParam === 'function') handleInviteParam();
 }
 
 init();
@@ -300,21 +303,22 @@ const LOG_VALUE_PAT = '[0-9⊘↺C]|\\+[24]';
 
 function colorizeLog(msg) {
   let s = esc(msg);
-  s = s.replace(/Comodín Pila Salvaje/g, () => {
+  // (Spanish or English words: the log is translated for display when English is on)
+  s = s.replace(/Comodín Pila Salvaje|Wild Pile/g, word => {
     let ci = 0;
-    return 'Comodín Pila Salvaje'.split('').map(ch => {
+    return word.split('').map(ch => {
       if (ch === ' ') return ' ';
       return `<span style="color:${LOG_WILD_COLORS[ci++ % 4]};font-weight:700">${ch}</span>`;
     }).join('');
   });
-  s = s.replace(new RegExp(`Comodín(?:\\s+(${LOG_VALUE_PAT}))?`, 'g'), (_, val) => {
-    const rain = 'Comodín'.split('').map((ch, i) =>
+  s = s.replace(new RegExp(`(Comodín|Wild)(?:\\s+(${LOG_VALUE_PAT}))?`, 'g'), (_, word, val) => {
+    const rain = word.split('').map((ch, i) =>
       `<span style="color:${LOG_WILD_COLORS[i % 4]};font-weight:700">${ch}</span>`
     ).join('');
     return val ? rain + `<b> ${val}</b>` : rain;
   });
-  s = s.replace(new RegExp(`(Rojo|Amarillo|Verde|Azul)(?:\\s+(${LOG_VALUE_PAT}))?`, 'g'), (_, name, val) => {
-    const key = Object.entries(COLOR_NAME).find(([, v]) => v === name)?.[0];
+  s = s.replace(new RegExp(`(?<!\\p{L})(Rojo|Amarillo|Verde|Azul|Red|Yellow|Green|Blue)(?!\\p{L})(?:\\s+(${LOG_VALUE_PAT}))?`, 'gu'), (_, name, val) => {
+    const key = { Rojo: 'red', Amarillo: 'yellow', Verde: 'green', Azul: 'blue', Red: 'red', Yellow: 'yellow', Green: 'green', Blue: 'blue' }[name];
     const hex = LOG_COLOR_HEX[key] || '#fff';
     return `<span class="log-color-${key}" style="color:${hex};font-weight:700">${name}${val ? ' '+val : ''}</span>`;
   });
@@ -371,9 +375,9 @@ function showScreen(id) {
       setTimeout(openSpotifyModal, 400);
     } else if (cbErr) {
       sessionStorage.removeItem('spotify_callback_error');
-      const msg = cbErr === 'access_denied'   ? 'Cancelaste la conexión con Spotify.'
-                : cbErr === 'verifier_missing' ? 'Error de sesión Spotify. Intenta de nuevo.'
-                : cbErr === 'fetch_failed'     ? 'No se pudo contactar Spotify. Revisa tu conexión.'
+      const msg = cbErr === 'access_denied'   ? t('sp.cancel')
+                : cbErr === 'verifier_missing' ? t('sp.session')
+                : cbErr === 'fetch_failed'     ? t('sp.fetch')
                 :                               `Error de Spotify: ${cbErr}`;
       setTimeout(() => showSpotifyError(msg), 400);
     }
@@ -455,12 +459,13 @@ function showJoin() {
 async function handleCreate() {
   const rawName = document.getElementById('player-name').value.trim();
   if (!rawName) { showLandingError('Escribe tu nombre primero'); return; }
-  if (!localUid) { showLandingError('Aún conectando… intenta de nuevo'); return; }
+  if (!localUid) { showLandingError(t('err.connecting')); return; }
   const name = selectedEmoji ? selectedEmoji + ' ' + rawName : rawName;
   localName = name;
 
   const roomId = genRoomCode();
   await db.collection('rooms').doc(roomId).set({
+    game: 'fiesta',   // all three card games share 'rooms'; this marks ours
     status: 'lobby',
     hostId: localUid,
     players: [{ id: localUid, name, cardCount: 0 }],
@@ -499,17 +504,18 @@ async function handleJoin() {
   const rawName = document.getElementById('player-name').value.trim();
   const code = document.getElementById('room-code-input').value.trim().toUpperCase();
   if (!rawName) { showLandingError('Escribe tu nombre primero'); return; }
-  if (code.length !== 6) { showLandingError('Introduce el código de sala de 6 caracteres'); return; }
-  if (!localUid) { showLandingError('Aún conectando… intenta de nuevo'); return; }
+  if (code.length !== 6) { showLandingError(t('err.code')); return; }
+  if (!localUid) { showLandingError(t('err.connecting')); return; }
   const name = selectedEmoji ? selectedEmoji + ' ' + rawName : rawName;
 
   const snap = await db.collection('rooms').doc(code).get();
-  if (!snap.exists) { showLandingError('Sala no encontrada'); return; }
+  // rooms of the other games (VIRUS!, tagged UNO Mentiroso rooms) don't open here
+  if (!snap.exists || (snap.data()?.game && snap.data().game !== 'fiesta')) { showLandingError(t('err.notFound')); return; }
   const data = snap.data();
-  if (data.status === 'ended') { showLandingError('La partida ya terminó'); return; }
+  if (data.status === 'ended') { showLandingError(t('err.ended')); return; }
 
   if (data.status === 'lobby') {
-    if (data.players.length >= 10) { showLandingError('Sala llena (máximo 10)'); return; }
+    if (data.players.length >= 10) { showLandingError(t('err.full', { n: 10 })); return; }
 
     if (!data.players.find(p => p.id === localUid)) {
       const uniqueName = getUniqueName(name, data.players);
@@ -560,7 +566,7 @@ async function handleJoin() {
       localName = existingPlayer.name;
     } else {
       // New player joining mid-game: deal 7 cards from the draw pile
-      if (data.players.length >= 10) { showLandingError('Sala llena (máximo 10)'); return; }
+      if (data.players.length >= 10) { showLandingError(t('err.full', { n: 10 })); return; }
       const uniqueName = getUniqueName(name, data.players);
       const { drawn, newDrawPile } = takeCards(data.drawPile, 7);
       localName = uniqueName;
@@ -584,7 +590,8 @@ async function handleJoin() {
 async function tryRejoin(roomId) {
   try {
     const snap = await db.collection('rooms').doc(roomId).get();
-    if (!snap.exists) { sessionStorage.clear(); return; }
+    // (sessionStorage is shared with the other games on the same site)
+    if (!snap.exists || (snap.data()?.game && snap.data().game !== 'fiesta')) { sessionStorage.clear(); return; }
     const data = snap.data();
     const player = data.players.find(p => p.id === localUid);
     if (!player) { sessionStorage.clear(); return; }
@@ -611,15 +618,15 @@ async function tryRejoin(roomId) {
 function copyCode() {
   navigator.clipboard.writeText(currentRoomId).catch(() => {});
   const btn = document.querySelector('.btn-copy');
-  btn.textContent = '¡Copiado!';
-  setTimeout(() => { btn.textContent = 'Copiar'; }, 1500);
+  btn.textContent = t('ui.copied');
+  setTimeout(() => { btn.textContent = t('ui.copy'); }, 1500);
 }
 
 function copyGameCode(el) {
   navigator.clipboard.writeText(currentRoomId).catch(() => {});
   const textEl = el.querySelector('#game-room-code-text');
   const original = textEl.textContent;
-  textEl.textContent = '¡Copiado!';
+  textEl.textContent = t('ui.copied');
   el.querySelector('svg').style.display = 'none';
   setTimeout(() => {
     textEl.textContent = original;
@@ -649,6 +656,8 @@ function setupPresence(roomId) {
       if (isBot(player.id)) continue; // bots have no RTDB presence — never treat as disconnected
 
       if (!present[player.id]) {
+        // Y5: remember since when they're gone, so their seat can say "Reconectando…"
+        if (!presenceMissingSince[player.id]) presenceMissingSince[player.id] = Date.now();
         if (!disconnectTimers[player.id]) {
           const pid  = player.id;
           const pname = player.name;
@@ -660,13 +669,27 @@ function setupPresence(roomId) {
           }, 180000);
         }
       } else {
+        delete presenceMissingSince[player.id];
         if (disconnectTimers[player.id]) {
           clearTimeout(disconnectTimers[player.id]);
           delete disconnectTimers[player.id];
         }
       }
     }
+    if (roomState?.status === 'playing') renderOpponents(roomState);
   });
+}
+
+// Y5 — reconnect grace time. pid -> when their presence disappeared (my clock).
+// On their own turn they get RECONNECT_TURN_GRACE before being marked disconnected
+// (which skips them); otherwise the 3-minute timer above.
+const presenceMissingSince = {};
+const RECONNECT_TURN_GRACE = 30000;
+function checkReconnectGrace(state) {
+  const cur = state.players[state.currentPlayerIndex];
+  if (!cur || isBot(cur.id) || cur.disconnected || cur.id === localUid) return;
+  const since = presenceMissingSince[cur.id];
+  if (since && Date.now() - since > RECONNECT_TURN_GRACE) markPlayerDisconnected(cur.id, cur.name);
 }
 
 function teardownPresence() {
@@ -683,6 +706,7 @@ function teardownPresence() {
     clearTimeout(disconnectTimers[uid]);
     delete disconnectTimers[uid];
   });
+  Object.keys(presenceMissingSince).forEach(uid => delete presenceMissingSince[uid]);
   if (voiceActivityRef) { voiceActivityRef.off(); voiceActivityRef = null; }
   voiceActivityLoaded = false;
 }
@@ -697,26 +721,26 @@ function setupVoiceActivityListener(roomId) {
     const uid = snap.key;
     if (uid === localUid) return;
     const player = roomState?.players?.find(p => p.id === uid);
-    const name = player?.name || 'Alguien';
-    notify('🎤 Chat de voz', `${name} abrió el micrófono.`);
-    showVoiceJoinToast(`🎤 ${name} abrió el micrófono`);
+    const name = player?.name || t('ui.someone');
+    notify('🎤 ' + t('vc.title'), t('vc.opened', { name }) + '.');
+    showVoiceJoinToast('🎤 ' + t('vc.opened', { name }));
   });
   ref.on('child_removed', snap => {
     const uid = snap.key;
     if (uid === localUid) return;
     const player = roomState?.players?.find(p => p.id === uid);
-    const name = player?.name || 'Alguien';
-    showVoiceJoinToast(`📵 ${name} dejó el chat de voz`);
+    const name = player?.name || t('ui.someone');
+    showVoiceJoinToast('📵 ' + t('vc.left', { name }));
   });
   ref.on('child_changed', snap => {
     const uid = snap.key;
     if (uid === localUid) return;
     const player = roomState?.players?.find(p => p.id === uid);
-    const name = player?.name || 'Alguien';
+    const name = player?.name || t('ui.someone');
     if (snap.val()?.muted) {
-      showVoiceJoinToast(`🔇 ${name} silenció el micrófono`);
+      showVoiceJoinToast('🔇 ' + t('vc.muted', { name }));
     } else {
-      showVoiceJoinToast(`🎤 ${name} activó el micrófono`);
+      showVoiceJoinToast('🎤 ' + t('vc.unmuted', { name }));
     }
   });
   ref.once('value', () => { voiceActivityLoaded = true; });
@@ -791,6 +815,7 @@ function skipLinkedTurn(state) {
 function subscribeToRoom(roomId) {
   if (roomUnsub) roomUnsub();
   prevNotifState = null;
+  fxPrevState = null;
   roomUnsub = db.collection('rooms').doc(roomId).onSnapshot(snap => {
     if (!snap.exists) return;
     roomState = snap.data();
@@ -812,7 +837,9 @@ function onRoomUpdate(state) {
     // Firestore's atomic write means duplicate triggers just overwrite with the same result.
     const votes = state.endVotes || [];
     const connectedPlayers = state.players.filter(p => !p.disconnected);
-    if (connectedPlayers.length > 0 && connectedPlayers.every(p => votes.includes(p.id))) {
+    // Bots never vote, so only connected people count for ending by vote
+    const voters = connectedPlayers.filter(p => !isBot(p.id));
+    if (voters.length > 0 && voters.every(p => votes.includes(p.id))) {
       const result = determineWinner(state);
       db.collection('rooms').doc(currentRoomId).update({
         status: 'ended',
@@ -856,10 +883,25 @@ function onRoomUpdate(state) {
     renderGame(state);
     scheduleBotTick(state);
   } else if (state.status === 'ended') {
+    // R6: when the game ends while I'm watching, let the last card land on the table
+    // first, then show the winner screen
+    const onGame = document.getElementById('screen-game').classList.contains('active');
+    if (onGame && fxPrevState?.status === 'playing') {
+      renderGame(state);
+      winnerHoldUntil = Date.now() + 2600;
+    }
+    if (Date.now() < winnerHoldUntil) {
+      clearTimeout(winnerHoldTimer);
+      winnerHoldTimer = setTimeout(() => {
+        if (roomState?.status === 'ended') { showScreen('winner'); renderWinner(roomState); }
+      }, winnerHoldUntil - Date.now());
+      return;
+    }
     showScreen('winner');
     renderWinner(state);
   }
 }
+let winnerHoldUntil = 0, winnerHoldTimer = null;
 
 // ============================================================
 // LOBBY RENDER
@@ -877,13 +919,13 @@ function renderLobby(state) {
     const isReady   = readyVotes.includes(p.id);
     const wasHere   = isRematch && prevNames.includes(p.name);
     const removeBtn = isHost && isBot(p.id)
-      ? `<button class="btn-remove-bot" onclick="handleRemoveBot('${p.id}')" title="Quitar bot">✕</button>`
+      ? `<button class="btn-remove-bot" onclick="handleRemoveBot('${p.id}')" title="${t('lob.removeBot')}">✕</button>`
       : '';
     return `<div class="player-item ${p.id === localUid ? 'me' : ''} ${p.disconnected ? 'player-disconnected' : ''} ${isBot(p.id) ? 'is-bot' : ''}">
       ${p.id === state.hostId ? '👑 ' : ''}${esc(p.name)}
       ${wasHere ? '<span class="prev-badge">vuelve</span>' : ''}
       ${isReady  ? '<span class="ready-badge">✓ listo</span>' : ''}
-      ${p.disconnected ? ' <span class="dc-badge">desconectado</span>' : ''}
+      ${p.disconnected ? ` <span class="dc-badge">${t('lob.dc')}</span>` : ''}
       ${removeBtn}
     </div>`;
   }).join('');
@@ -898,8 +940,8 @@ function renderLobby(state) {
   if (isRematch) {
     const alreadyReady = readyVotes.includes(localUid);
     readyArea.innerHTML = alreadyReady
-      ? '<p class="muted ready-confirmed">✓ Estás listo para jugar</p>'
-      : '<button class="btn btn-primary" onclick="handleReadyVote()">¡Quiero jugar de nuevo!</button>';
+      ? `<p class="muted ready-confirmed">${t('lob.ready')}</p>`
+      : `<button class="btn btn-primary" onclick="handleReadyVote()">${t('lob.again')}</button>`;
   } else {
     readyArea.innerHTML = '';
   }
@@ -921,7 +963,7 @@ function renderLobby(state) {
   if (isHost) {
     const canAddBot = state.players.length < 10;
     botArea.innerHTML = canAddBot
-      ? `<button class="btn btn-sm" style="background:#c0186c;color:#fff;font-weight:700;border:none;box-shadow:0 0 12px rgba(192,24,108,.5);" onclick="handleAddBot()">+ Añadir bot</button>`
+      ? `<button class="btn btn-sm" style="background:#c0186c;color:#fff;font-weight:700;border:none;box-shadow:0 0 12px rgba(192,24,108,.5);" onclick="handleAddBot()">${t('lob.addBot')}</button>`
       : '';
   } else {
     botArea.innerHTML = '';
@@ -929,8 +971,11 @@ function renderLobby(state) {
 
   if (isHost) {
     startBtn.disabled = !canStart;
-    startBtn.textContent = canStart ? 'Iniciar partida' : 'Esperando jugadores…';
+    startBtn.textContent = canStart ? t('lob.start') : t('lob.waitingPlayers');
   }
+
+  // Invite link, turn timer, bot level (extras.js)
+  if (typeof renderLobbyExtras === 'function') renderLobbyExtras(state, isHost);
 }
 
 // ============================================================
@@ -976,6 +1021,9 @@ async function handleStart() {
     linkedPlayers: firebase.firestore.FieldValue.delete(),
     pendingSkips: firebase.firestore.FieldValue.delete(),
     echoPenalty: firebase.firestore.FieldValue.delete(),
+    stats: {},   // match counts for the awards (extras.js)
+    gameNo: (roomState.gameNo || 0) + 1,   // which game in this room (room score)
+    seriesDone: false,
     lastActivity: firebase.firestore.FieldValue.serverTimestamp()
   });
 }
@@ -984,7 +1032,11 @@ async function handleStart() {
 // GAME RENDER
 // ============================================================
 
+// The state drawn last time; fx.js compares it with the new one to animate what changed
+let fxPrevState = null;
+
 function renderGame(state) {
+  const firstDraw = !fxPrevState;   // first draw after (re)joining: show, don't animate
   if (!isMyTurn(state)) drawnCardState = null;
   renderTopCard(state);
   renderOpponents(state);
@@ -1010,11 +1062,11 @@ function renderGame(state) {
   const linked = state.linkedPlayers || [];
   const handLabel = document.getElementById('hand-label');
   if (linked.includes(localUid)) {
-    handLabel.innerHTML = 'Tu mano <span class="linked-badge">🔗 ENLAZADO</span>';
+    handLabel.innerHTML = `${t('hand.mine')} <span class="linked-badge">${t('hand.linked')}</span>`;
   } else if (state.echoPenalty?.breakOnPlayerId === localUid) {
-    handLabel.innerHTML = 'Tu mano <span class="linked-badge" style="background:var(--warning,#e67e22)">⚡ ECO ACTIVO</span>';
+    handLabel.innerHTML = `${t('hand.mine')} <span class="linked-badge" style="background:var(--warning,#e67e22)">${t('hand.echo')}</span>`;
   } else {
-    handLabel.textContent = 'Tu mano';
+    handLabel.textContent = t('hand.mine');
   }
 
   const myHand           = state.hands?.[localUid] || [];
@@ -1025,6 +1077,12 @@ function renderGame(state) {
   } else {
     document.getElementById('draw-pile-area').classList.remove('must-draw');
   }
+
+  // Flying cards, stamps, sounds for whatever changed since the last draw (fx.js)
+  if (fxPrevState && fxPrevState !== state) FX.onState(fxPrevState, state);
+  fxPrevState = state;
+  // Faces, turn banner, timer, 2-card alert, hand badges… (extras.js)
+  if (typeof afterGameRender === 'function') afterGameRender(state, firstDraw);
 }
 
 function renderTurnActions(state) {
@@ -1110,7 +1168,7 @@ function renderUnoCallOverlay(state) {
           log,
           lastActivity: firebase.firestore.FieldValue.serverTimestamp()
         });
-      }, 5000);
+      }, botLevel(state).unoShoutMs);   // how fast depends on the bot level
     }
   }
 
@@ -1119,10 +1177,10 @@ function renderUnoCallOverlay(state) {
   const btn   = document.getElementById('uno-call-btn');
 
   if (req.playerId === localUid) {
-    label.textContent = '¡Solo te queda 1 carta!';
-    btn.textContent   = '¡GRITA UNO!';
+    label.textContent = t('uno.mine');
+    btn.textContent   = t('uno.shout');
   } else {
-    label.textContent = `¡${req.playerName} tiene 1 carta!`;
+    label.textContent = t('uno.other', { name: req.playerName });
     btn.textContent   = `GRITARLE UNO A ${req.playerName.toUpperCase()}`;
   }
 
@@ -1218,14 +1276,19 @@ function renderOpponents(state) {
     const isEchoed = echoPenalty?.echoedPlayerId === p.id;
     const miniCards = Array(Math.min(p.cardCount, 12)).fill(0)
       .map(() => `<div class="card-back mini"></div>`).join('');
-    return `<div class="opponent ${isCurrent ? 'active-player' : ''}
+    // B3: 1–2 cards left glows red; Y5: "Reconectando…" while their connection is gone
+    const nearWin = p.cardCount > 0 && p.cardCount <= 2;
+    const reconnecting = !isDisconnected && !isBot(p.id) && presenceMissingSince[p.id];
+    return `<div class="opponent ${isCurrent ? 'active-player' : ''} ${nearWin ? 'near-win' : ''}
                                   ${isDisconnected ? 'player-disconnected' : ''}
                                   ${isSpeaking ? 'voice-speaking' : ''}
                                   ${isLinked ? 'is-linked' : ''}"
                  data-uid="${esc(p.id)}">
       ${isLinked ? '<div class="linked-badge">🔗 ENLAZADO</div>' : ''}
       ${isEchoed ? '<div class="linked-badge" style="background:var(--warning,#e67e22)">⚡ ECO</div>' : ''}
-      <div class="opponent-name">${esc(p.name)}${isDisconnected ? ' <span class="dc-badge">desconectado</span>' : ''}${hasVoice ? ' <span class="voice-mic-icon">🎤</span>' : ''}</div>
+      ${typeof seatFaceHTML === 'function' ? seatFaceHTML(state, p) : ''}
+      <div class="opponent-name">${esc(p.name)}${isDisconnected ? ` <span class="dc-badge">${t('lob.dc')}</span>` : ''}${hasVoice ? ' <span class="voice-mic-icon">🎤</span>' : ''}</div>
+      ${reconnecting ? `<span class="rc-badge" data-since="${presenceMissingSince[p.id]}" data-turn="${isCurrent ? 1 : 0}">Reconectando…</span>` : ''}
       <div class="opponent-cards">${miniCards}</div>
       <div class="opponent-count">${p.cardCount}🃏</div>
     </div>`;
@@ -1249,9 +1312,9 @@ function renderStatus(state) {
   if (dirEl) dirEl.innerHTML = directionCardHTML(state.direction);
 
   if (myTurn) {
-    el.textContent = '🎊 ¡Tu turno! Elige una carta.';
+    el.textContent = t('st.yourTurn');
   } else {
-    el.textContent = `Turno de ${current?.name || '?'}`;
+    el.textContent = t('st.turnOf', { name: current?.name || '?' });
   }
 }
 
@@ -1313,15 +1376,15 @@ function renderHand(state) {
   if (isPileHolder) {
     const hasMatch = myHand.some(c => c.color === pilePhase.pileColor);
     document.getElementById('hand-label').textContent = hasMatch
-      ? `Mini-pila (${COLOR_NAME[pilePhase.pileColor]}) — juega una carta que coincida o toca "Tomar pila"`
-      : `Mini-pila (${COLOR_NAME[pilePhase.pileColor]}) — no tienes cartas jugables`;
+      ? t('hand.pileMatch', { c: colorLabel(pilePhase.pileColor) })
+      : t('hand.pileNone', { c: colorLabel(pilePhase.pileColor) });
   } else if (inDrawMode) {
     document.getElementById('hand-label').textContent = drawnCardState.canPlay
-      ? '¡Sacaste una carta jugable! Juega cualquier carta válida o pasa.'
-      : 'Sacaste una carta no jugable. Juega una carta válida o pasa.';
+      ? t('hand.drawnOk')
+      : t('hand.drawnNo');
   } else {
     document.getElementById('hand-label').textContent =
-      myTurn ? 'Tu turno — haz clic en una carta para jugar' : `Tu mano (${myHand.length})`;
+      myTurn ? t('hand.pick') : t('hand.count', { n: myHand.length });
   }
 
   // Yellow glow when it's my turn
@@ -1339,14 +1402,14 @@ function renderHand(state) {
     const nextName = esc(state.players[nextIdx]?.name || '—');
     const curName  = esc(state.players[curIdx]?.name  || '—');
     const center = myTurn
-      ? `<span class="toi-label" style="color:rgba(255,255,255,.3)">tu turno</span>`
+      ? `<span class="toi-label" style="color:rgba(255,255,255,.3)">${t('toi.you')}</span>`
       : `<span class="toi-current">${curName}</span>`;
     const leftItem  = dir >= 0
-      ? `<span class="toi-item"><span class="toi-arrow">←</span><span class="toi-label toi-prev-label">anterior</span><span class="toi-name toi-prev-name">${prevName}</span></span>`
-      : `<span class="toi-item"><span class="toi-arrow">←</span><span class="toi-label toi-next-label">siguiente</span><span class="toi-name toi-next-name">${nextName}</span></span>`;
+      ? `<span class="toi-item"><span class="toi-arrow">←</span><span class="toi-label toi-prev-label">${t('toi.prev')}</span><span class="toi-name toi-prev-name">${prevName}</span></span>`
+      : `<span class="toi-item"><span class="toi-arrow">←</span><span class="toi-label toi-next-label">${t('toi.next')}</span><span class="toi-name toi-next-name">${nextName}</span></span>`;
     const rightItem = dir >= 0
-      ? `<span class="toi-item"><span class="toi-name toi-next-name">${nextName}</span><span class="toi-label toi-next-label">siguiente</span><span class="toi-arrow">→</span></span>`
-      : `<span class="toi-item"><span class="toi-name toi-prev-name">${prevName}</span><span class="toi-label toi-prev-label">anterior</span><span class="toi-arrow">→</span></span>`;
+      ? `<span class="toi-item"><span class="toi-name toi-next-name">${nextName}</span><span class="toi-label toi-next-label">${t('toi.next')}</span><span class="toi-arrow">→</span></span>`
+      : `<span class="toi-item"><span class="toi-name toi-prev-name">${prevName}</span><span class="toi-label toi-prev-label">${t('toi.prev')}</span><span class="toi-arrow">→</span></span>`;
     toiEl.innerHTML = leftItem + center + rightItem;
     toiEl.classList.remove('hidden');
   } else {
@@ -1366,7 +1429,7 @@ function renderLog(state) {
                 : msg.includes('¡UNO! 🎴') ? ' log-uno-call'
                 : /intercambi/.test(msg) ? ' log-swap'
                 : '';
-      return `<div class="log-entry${cls}">${colorizeLog(msg)}</div>`;
+      return `<div class="log-entry${cls}">${colorizeLog(translateLog(msg))}</div>`;
     })
     .join('');
   el.scrollTop = 0;
@@ -1463,7 +1526,7 @@ function renderChatPanel(state) {
     playersEl.innerHTML = players.map(p => {
       const isMe = p.id === localUid;
       const dc = p.disconnected;
-      return `<span class="chat-player-chip ${dc ? 'dc' : ''}">${esc(p.name)}${isMe ? ' (yo)' : ''}</span>`;
+      return `<span class="chat-player-chip ${dc ? 'dc' : ''}">${esc(p.name)}${isMe ? ' ' + t('chat.me') : ''}</span>`;
     }).join('');
   }
 
@@ -1518,8 +1581,8 @@ function toggleNotifications() {
           notifAudioCtx = new (window.AudioContext || window.webkitAudioContext)();
           notifAudioCtx.resume();
         } catch (_) {}
-        try { new Notification('🔔 Notificaciones activadas', { body: 'Recibirás avisos del juego.', tag: 'notif-test' }); } catch (_) {}
-        showVoiceToast('🔔 Notificaciones activadas');
+        try { new Notification(t('nt.on'), { body: t('nt.onBody'), tag: 'notif-test' }); } catch (_) {}
+        showVoiceToast(t('nt.on'));
       }
     });
   } else {
@@ -1720,7 +1783,7 @@ function updateMusicButton() {
   const btn = document.getElementById('music-toggle-btn');
   if (!btn) return;
   btn.textContent = musicPlaying ? '🎵' : '🔇';
-  btn.title = musicPlaying ? 'Silenciar música' : 'Activar música';
+  btn.title = musicPlaying ? t('mu.mute') : t('mu.play');
   btn.classList.toggle('music-active', musicPlaying);
 }
 
@@ -1970,23 +2033,23 @@ function openSpotifyModal() {
             <div class="spotify-modal-track-artist">${esc(track.artist)}</div>
           </div>
         </div>`
-      : `<p class="spotify-modal-desc">Sin reproducción activa ahora mismo.</p>`;
+      : `<p class="spotify-modal-desc">${t('sp.nothing')}</p>`;
     card.innerHTML = `
       ${SPOTIFY_SVG_LARGE}
-      <div class="spotify-modal-connected">● Conectado a Spotify</div>
+      <div class="spotify-modal-connected">● ${t('sp.connected')}</div>
       ${trackHTML}
       <div class="spotify-modal-btns">
-        <button class="btn btn-ghost btn-sm" onclick="disconnectSpotify()">Desconectar</button>
+        <button class="btn btn-ghost btn-sm" onclick="disconnectSpotify()">${t('ui.disconnect')}</button>
         <button class="btn btn-primary btn-sm" onclick="closeSpotifyModal()">Cerrar</button>
       </div>`;
   } else {
     card.innerHTML = `
       ${SPOTIFY_SVG_LARGE}
-      <h3 class="spotify-modal-title">Conectar Spotify</h3>
-      <p class="spotify-modal-desc">Comparte lo que estás escuchando con los demás jugadores. Aparecerá en la barra superior.</p>
+      <h3 class="spotify-modal-title">${t('sp.connectTitle')}</h3>
+      <p class="spotify-modal-desc">${t('sp.desc')}</p>
       <div class="spotify-modal-btns">
-        <button class="btn spotify-connect-btn btn-sm" onclick="initiateSpotifyAuth()">Conectar cuenta</button>
-        <button class="btn btn-ghost btn-sm" onclick="closeSpotifyModal()">Cancelar</button>
+        <button class="btn spotify-connect-btn btn-sm" onclick="initiateSpotifyAuth()">${t('sp.connectBtn')}</button>
+        <button class="btn btn-ghost btn-sm" onclick="closeSpotifyModal()">${t('ui.cancel')}</button>
       </div>`;
   }
   document.getElementById('spotify-modal').classList.remove('hidden');
@@ -2004,7 +2067,7 @@ function updateSpotifyButton() {
   const btn = document.getElementById('spotify-btn');
   if (!btn) return;
   btn.classList.toggle('spotify-active', isSpotifyConnected());
-  btn.title = isSpotifyConnected() ? 'Spotify conectado' : 'Conectar Spotify';
+  btn.title = isSpotifyConnected() ? t('sp.on') : t('sp.connectTitle');
 }
 
 function showSpotifyError(msg) {
@@ -2058,7 +2121,7 @@ async function connectLastfm() {
     const res  = await fetch(`${LASTFM_API_BASE}?method=user.getinfo&user=${encodeURIComponent(username)}&api_key=${LASTFM_API_KEY}&format=json`);
     const data = await res.json();
     if (data.error) {
-      if (errEl) errEl.textContent = 'Usuario no encontrado en Last.fm.';
+      if (errEl) errEl.textContent = t('lf.notFound');
       return;
     }
     localStorage.setItem('lastfm_username', data.user.name);
@@ -2066,7 +2129,7 @@ async function connectLastfm() {
     updateLastfmButton();
     openLastfmModal();
   } catch (e) {
-    if (errEl) errEl.textContent = 'Error de conexión. Intenta de nuevo.';
+    if (errEl) errEl.textContent = t('lf.netError');
   }
 }
 
@@ -2122,7 +2185,7 @@ function openLastfmModal() {
   if (username) {
     const raw   = spotifyTracksData[localUid];
     const track = raw?.source === 'lastfm' ? raw : null;
-    const trackLabel = track?.isPlaying ? 'Escuchando ahora' : 'Última escuchada';
+    const trackLabel = track?.isPlaying ? t('lf.now') : t('lf.last');
     const trackHTML = track
       ? `<div class="lastfm-modal-track">
           ${track.albumArt ? `<img class="lastfm-modal-art" src="${esc(track.albumArt)}" alt="">` : ''}
@@ -2135,22 +2198,22 @@ function openLastfmModal() {
       : `<p class="lastfm-modal-desc">Sin historial de Last.fm.</p>`;
     card.innerHTML = `
       ${LASTFM_SVG_LARGE}
-      <div class="lastfm-modal-connected">● Conectado como ${esc(username)}</div>
+      <div class="lastfm-modal-connected">● ${t('lf.as', { name: esc(username) })}</div>
       ${trackHTML}
       <div class="lastfm-modal-btns">
-        <button class="btn btn-ghost btn-sm" onclick="disconnectLastfm()">Desconectar</button>
+        <button class="btn btn-ghost btn-sm" onclick="disconnectLastfm()">${t('ui.disconnect')}</button>
         <button class="btn btn-primary btn-sm" onclick="closeLastfmModal()">Cerrar</button>
       </div>`;
   } else {
     card.innerHTML = `
       ${LASTFM_SVG_LARGE}
-      <h3 class="lastfm-modal-title">Conectar Last.fm</h3>
-      <p class="lastfm-modal-desc">Introduce tu usuario de Last.fm para compartir lo que escuchas (funciona con Spotify, Apple Music, Tidal y más).</p>
-      <input id="lastfm-username-input" class="lastfm-username-input" type="text" placeholder="Tu usuario de Last.fm" autocomplete="off" onkeydown="if(event.key==='Enter')connectLastfm()">
+      <h3 class="lastfm-modal-title">${t('lf.connectTitle')}</h3>
+      <p class="lastfm-modal-desc">${t('lf.desc')}</p>
+      <input id="lastfm-username-input" class="lastfm-username-input" type="text" placeholder="${t('lf.placeholder')}" autocomplete="off" onkeydown="if(event.key==='Enter')connectLastfm()">
       <span id="lastfm-input-error" class="lastfm-input-error"></span>
       <div class="lastfm-modal-btns">
-        <button class="btn lastfm-connect-btn btn-sm" onclick="connectLastfm()">Conectar</button>
-        <button class="btn btn-ghost btn-sm" onclick="closeLastfmModal()">Cancelar</button>
+        <button class="btn lastfm-connect-btn btn-sm" onclick="connectLastfm()">${t('lf.connect')}</button>
+        <button class="btn btn-ghost btn-sm" onclick="closeLastfmModal()">${t('ui.cancel')}</button>
       </div>`;
     setTimeout(() => document.getElementById('lastfm-username-input')?.focus(), 50);
   }
@@ -2171,7 +2234,7 @@ function updateLastfmButton() {
   btn.classList.toggle('lastfm-active', isLastfmConnected());
   btn.title = isLastfmConnected()
     ? `Last.fm: ${localStorage.getItem('lastfm_username')}`
-    : 'Conectar Last.fm';
+    : t('lf.connectTitle');
 }
 
 function notify(title, body) {
@@ -2193,25 +2256,25 @@ function checkNotifications(state) {
 
   if (prev.status === 'lobby' && state.status === 'playing') {
     const first = state.players[state.currentPlayerIndex];
-    notify('¡La partida comenzó!', `${first?.name || '?'} va primero.`);
+    notify(t('nt.started'), t('nt.first', { name: first?.name || '?' }));
     return;
   }
   if (prev.status !== 'ended' && state.status === 'ended') {
     const won = state.winner === localUid;
-    notify(won ? '🥳 ¡Ganaste!' : '🃏 Partida terminada',
-           won ? '¡Felicidades!' : `Ganó ${state.winnerName || '?'}`);
+    notify(won ? t('nt.won') : t('nt.over'),
+           won ? t('nt.congrats') : t('nt.whoWon', { name: state.winnerName || '?' }));
     return;
   }
   if (state.status !== 'playing') return;
 
   if (prev.currentPlayerIndex !== state.currentPlayerIndex &&
       state.players[state.currentPlayerIndex]?.id === localUid) {
-    notify('¡Es tu turno!', 'Elige una carta para jugar.');
+    notify(t('nt.yourTurn'), t('nt.yourTurnBody'));
     return;
   }
 
   if (!prev.unoCallRequiredFor && state.unoCallRequired?.playerId === localUid) {
-    notify('¡UNO!', '¡Solo te queda 1 carta! Grita UNO antes de que alguien te atrape.');
+    notify('¡UNO!', t('nt.uno'));
   }
 }
 
@@ -2221,10 +2284,13 @@ function checkNotifications(state) {
 
 async function selectCard(index) {
   if (!roomState) return;
+  FX.noteHand();   // where my cards are, so the played one flies from its real spot
   if (roomState.wild4Challenge) return;  // blocked during challenge phase
   const myHand = roomState.hands?.[localUid] || [];
   const card = myHand[index];
   if (!card) return;
+  // Guided first game: only the card the lesson asks for (tutorial.js)
+  if (LOCAL_GAME && !tutorialAllowsCard(card)) return;
 
   // Speed Play: number card matching both color AND value when not your turn
   if (!isMyTurn(roomState) && !roomState.wildPileUpPhase &&
@@ -2253,7 +2319,8 @@ async function selectCard(index) {
   if (drawnCardState !== null && index === drawnCardState.cardIdx && !drawnCardState.canPlay) return;
 
   if (!isActualPlayable(card, roomState)) {
-    alert('No puedes jugar esta carta. Elige otra o toma una.');
+    // in-game warning window instead of the browser's alert() (extras.js)
+    showNotice('✋', t('notice.cantTitle'), t('notice.cantBody'));
     return;
   }
 
@@ -2291,12 +2358,12 @@ async function selectCard(index) {
     document.getElementById('claim-dialog').classList.add('hidden');
     showDrawnTogetherDialog(index);
   } else if (card.value === 'wild') {
-    document.getElementById('claim-dialog-title').textContent = 'Elige el color del Comodín';
+    document.getElementById('claim-dialog-title').textContent = t('claim.wildTitle');
     document.getElementById('actual-card-preview').classList.add('hidden');
     renderClaimPicker();
     document.getElementById('claim-dialog').classList.remove('hidden');
   } else if (card.value === 'wild4') {
-    document.getElementById('claim-dialog-title').textContent = 'Elige el color para el +4';
+    document.getElementById('claim-dialog-title').textContent = t('claim.w4Title');
     document.getElementById('actual-card-preview').classList.add('hidden');
     renderClaimPicker();
     document.getElementById('claim-dialog').classList.remove('hidden');
@@ -2451,20 +2518,20 @@ function renderPointTakenOverlay(state) {
   const voted = eligible.filter(p => phase.votes[p.id]).length;
 
   document.getElementById('pt-wait-msg').textContent =
-    `${voted} / ${eligible.length} jugadores apuntaron`;
+    t('pt.count', { v: voted, n: eligible.length });
 
   if (myVote) {
     document.getElementById('pt-targets').classList.add('hidden');
     document.getElementById('pt-voted').classList.remove('hidden');
     const target = state.players.find(p => p.id === myVote);
-    document.getElementById('pt-voted').textContent = `✓ Apuntaste a ${esc(target?.name || '?')}`;
+    document.getElementById('pt-voted').textContent = t('pt.youPointed', { name: esc(target?.name || '?') });
   } else {
     document.getElementById('pt-voted').classList.add('hidden');
     document.getElementById('pt-targets').classList.remove('hidden');
     const others = state.players.filter(p => p.id !== localUid && !p.disconnected);
     document.getElementById('pt-targets').innerHTML = others.map(p =>
       `<button class="btn btn-secondary pt-target-btn" onclick="handlePointTakenVote('${p.id}')">
-        👉 ${esc(p.name)} <span class="pt-card-count">(${p.cardCount ?? 0} cartas)</span>
+        👉 ${esc(p.name)} <span class="pt-card-count">${t('pt.cards', { n: p.cardCount ?? 0 })}</span>
       </button>`
     ).join('');
   }
@@ -2632,15 +2699,14 @@ function renderWildPileUpPanel(state) {
   const hasMatch = myHand.some(c => c.color === phase.pileColor);
 
   document.getElementById('pu-title').innerHTML =
-    `⬆ Mini-Pila — color <strong style="color:${LOG_COLOR_HEX[phase.pileColor]}">${COLOR_NAME[phase.pileColor]}</strong>` +
-    ` (${phase.pile.length} carta${phase.pile.length !== 1 ? 's' : ''})`;
+    t(phase.pile.length === 1 ? 'pu.title1' : 'pu.title', { c: `<strong style="color:${LOG_COLOR_HEX[phase.pileColor]}">${colorLabel(phase.pileColor)}</strong>`, n: phase.pile.length });
   const holderEl = document.getElementById('pu-holder');
   holderEl.className = 'pu-holder' + (isHolder && !hasMatch ? ' must-take' : '');
   holderEl.innerHTML = isHolder
     ? (hasMatch
-        ? '¡Es tu turno! Juega una carta del color de la pila.'
-        : `No tienes cartas de color <strong style="color:${LOG_COLOR_HEX[phase.pileColor]}">${COLOR_NAME[phase.pileColor]}</strong>. Debes tomar la mini-pila.`)
-    : `Esperando que <strong>${esc(holder?.name || '?')}</strong> juegue…`;
+        ? t('pu.yourTurn')
+        : t('pu.noColor', { c: `<strong style="color:${LOG_COLOR_HEX[phase.pileColor]}">${colorLabel(phase.pileColor)}</strong>` }))
+    : t('pu.waiting', { name: `<strong>${esc(holder?.name || '?')}</strong>` });
   document.getElementById('pu-cards').innerHTML =
     phase.pile.map(c => buildCardHTML(c)).join('');
   const takePileBtn = document.getElementById('pu-take-btn');
@@ -2701,13 +2767,13 @@ function renderDrawnTogetherDialog(state) {
   const confirmBtn = document.getElementById('dt-confirm-btn');
 
   if (drawnTogetherEchoMode) {
-    titleEl.textContent = '⬌ Comodín de Enlace — Modo Eco';
+    titleEl.textContent = t('dt.echoTitle');
     echoDescEl.classList.remove('hidden');
     document.getElementById('dt-players').innerHTML = '';
-    confirmBtn.textContent = 'Activar Eco';
+    confirmBtn.textContent = t('dt.echoOk');
     confirmBtn.disabled = false;
   } else {
-    titleEl.textContent = '⬌ Comodín de Enlace — Elige 2 jugadores a enlazar';
+    titleEl.textContent = t('dt.title');
     echoDescEl.classList.add('hidden');
     const others = state.players.filter(p => p.id !== localUid && !p.disconnected);
     document.getElementById('dt-players').innerHTML = others.map(p => {
@@ -2717,7 +2783,7 @@ function renderDrawnTogetherDialog(state) {
         ${sel ? '⛓ ' : ''}${esc(p.name)}
       </button>`;
     }).join('');
-    confirmBtn.textContent = 'Enlazar';
+    confirmBtn.textContent = t('dt.ok');
     confirmBtn.disabled = drawnTogetherSelected.length !== 2;
   }
 
@@ -2830,11 +2896,11 @@ function renderWild4ChallengeArea(state) {
   const amChooser = ch.chooserId === localUid;
 
   if (!amVictim && !amChooser) {
-    content.innerHTML = `<p class="w4c-wait">⏳ ${ch.targetName} está decidiendo sobre el Comodín +4 de ${ch.chooserName}…</p>`;
+    content.innerHTML = `<p class="w4c-wait">⏳ ${t('w4c.waitOther', { t: esc(ch.targetName), c: esc(ch.chooserName) })}</p>`;
     return;
   }
   if (amChooser && !amVictim) {
-    content.innerHTML = `<p class="w4c-wait">⏳ ${ch.targetName} está decidiendo si desafiar tu Comodín +4…</p>`;
+    content.innerHTML = `<p class="w4c-wait">⏳ ${t('w4c.waitMine', { t: esc(ch.targetName) })}</p>`;
     return;
   }
 
@@ -2845,7 +2911,7 @@ function renderWild4ChallengeArea(state) {
 
   const hand = ch.chooserHandAtPlay || [];
   const cardCount = hand.length;
-  const prevColorName = COLOR_NAME[ch.prevTopColor] || ch.prevTopColor;
+  const prevColorName = COLOR_NAME[ch.prevTopColor] ? colorLabel(ch.prevTopColor) : ch.prevTopColor;
 
   if (!revealed) {
     // Phase 1: cards face-down
@@ -2853,11 +2919,11 @@ function renderWild4ChallengeArea(state) {
       `<div class="card-back w4c-facedown"><span class="back-uno">UNO</span></div>`
     ).join('');
     content.innerHTML = `
-      <p class="w4c-title">🃏 Mano de ${ch.chooserName} — ${cardCount} carta${cardCount !== 1 ? 's' : ''}:</p>
-      <div class="w4c-hand">${backCards || '<em style="color:var(--muted)">Mano vacía</em>'}</div>
+      <p class="w4c-title">🃏 ${t(cardCount === 1 ? 'w4c.hand1' : 'w4c.hand', { c: esc(ch.chooserName), n: cardCount })}</p>
+      <div class="w4c-hand">${backCards || `<em style="color:var(--muted)">${t('w4c.empty')}</em>`}</div>
       <div class="w4c-btns">
-        <button class="btn btn-ghost" onclick="handleWild4Accept()">Aceptar (tomar 4)</button>
-        <button class="btn btn-secondary" onclick="revealW4cHand()">Desafiar</button>
+        <button class="btn btn-ghost" onclick="handleWild4Accept()">${t('w4c.accept')}</button>
+        <button class="btn btn-secondary" onclick="revealW4cHand()">${t('w4c.challenge')}</button>
       </div>
     `;
   } else {
@@ -2882,15 +2948,15 @@ function renderWild4ChallengeArea(state) {
 
     const verdictClass = altCount > 0 ? 'invalid' : 'valid';
     const verdictText = altCount > 0
-      ? `⚠️ ${ch.chooserName} sí tenía cartas que podía poner. El Comodín +4 no era <strong>válido</strong>.`
-      : `✅ ${ch.chooserName} no tenía ninguna carta jugable. El Comodín +4 era <strong>válido</strong>.`;
+      ? '⚠️ ' + t('w4c.invalid', { c: esc(ch.chooserName) })
+      : '✅ ' + t('w4c.valid', { c: esc(ch.chooserName) });
 
     content.innerHTML = `
-      <p class="w4c-title">🃏 Mano de ${ch.chooserName} al jugar el Comodín +4 — color era ${prevColorName}:</p>
-      <div class="w4c-hand">${handHTML || '<em style="color:var(--muted)">Mano vacía</em>'}</div>
+      <p class="w4c-title">🃏 ${t('w4c.handAt', { c: esc(ch.chooserName), col: prevColorName })}</p>
+      <div class="w4c-hand">${handHTML || `<em style="color:var(--muted)">${t('w4c.empty')}</em>`}</div>
       <p class="w4c-verdict ${verdictClass}">${verdictText}</p>
       <div class="w4c-btns">
-        <button class="btn btn-secondary" onclick="handleWild4Challenge()">Confirmar desafío</button>
+        <button class="btn btn-secondary" onclick="handleWild4Challenge()">${t('w4c.confirm')}</button>
       </div>
     `;
   }
@@ -3276,8 +3342,8 @@ function showDrawConfirm(accent, icon, title, message, okLabel, cancelLabel, thi
     const okBtn    = document.getElementById('draw-confirm-ok');
     const canBtn   = document.getElementById('draw-confirm-cancel');
     const thirdBtn = document.getElementById('draw-confirm-third');
-    okBtn.textContent  = okLabel     || 'Sí, tomar una';
-    canBtn.textContent = cancelLabel || 'Cancelar';
+    okBtn.textContent  = okLabel     || t('draw.ok');
+    canBtn.textContent = cancelLabel || t('ui.cancel');
     if (thirdLabel) {
       thirdBtn.textContent = thirdLabel;
       thirdBtn.classList.remove('hidden');
@@ -3302,6 +3368,7 @@ function showDrawConfirm(accent, icon, title, message, okLabel, cancelLabel, thi
 }
 
 async function handleDraw() {
+  if (LOCAL_GAME) return;   // the guided game never needs a draw
   const state = roomState;
   if (!isMyTurn(state)) return;
   if (state.wild4Challenge) return;
@@ -3314,8 +3381,8 @@ async function handleDraw() {
   if (hasPlayable) {
     const ok = await showDrawConfirm(
       'white', '✋',
-      'Tienes cartas jugables',
-      'Tienes cartas que puedes jugar. ¿Quieres sacar una de todas formas?'
+      t('draw.haveTitle'),
+      t('draw.haveBody')
     );
     if (!ok) return;
   }
@@ -3534,12 +3601,13 @@ async function handleLeaveLobby() {
 }
 
 async function handleLeaveGame() {
+  if (LOCAL_GAME) { endTutorial(); return; }
   if (!roomState || !currentRoomId) { showScreen('landing'); return; }
   const ok = await showDrawConfirm(
     'red', '🚪',
-    '¿Seguro que quieres salir?',
-    'Si sales ahora no podrás ver la puntuación final ni serás incluido en el marcador. Si quieres terminar la partida y ver los resultados, vota para finalizar.',
-    'Salir', 'Quedarme', 'Votar Terminar'
+    t('g.leaveQ'),
+    t('g.leaveBody'),
+    t('g.leave'), t('g.stay'), t('g.voteEnd')
   );
   if (ok === 'third') { handleEndGameVote(); return; }
   if (!ok) return;
@@ -3622,7 +3690,7 @@ async function handleEndGameVote() {
     });
   } else {
     const log = addLog(state.log,
-      `${localName} propone terminar (${votes.length + 1}/${state.players.filter(p => !p.disconnected).length}).`);
+      `${localName} propone terminar (${votes.length + 1}/${state.players.filter(p => !p.disconnected && !isBot(p.id)).length}).`);
     await db.collection('rooms').doc(currentRoomId).update({
       endVotes: firebase.firestore.FieldValue.arrayUnion(localUid),
       log,
@@ -3638,11 +3706,11 @@ function renderEndVoteStatus(state) {
   const hasVoted = votes.includes(localUid);
 
   statusEl.textContent = votes.length > 0
-    ? `${votes.length}/${state.players.filter(p => !p.disconnected).length} quieren terminar`
+    ? t('g.votes', { n: votes.length, t: state.players.filter(p => !p.disconnected && !isBot(p.id)).length })
     : '';
 
   if (btn) {
-    btn.textContent = hasVoted ? 'Retirar voto' : 'Terminar';
+    btn.textContent = hasVoted ? t('g.withdraw') : t('g.end');
     btn.classList.toggle('btn-voted', hasVoted);
   }
 }
@@ -3661,14 +3729,13 @@ function renderWinner(state) {
   document.getElementById('winner-error')?.classList.add('hidden');
 
   if (reason === 'vote') {
-    titleEl.textContent = '🤝 ¡Partida terminada!';
-    const winLabel = state.winCondition === 'points' ? 'ganó con menos puntos' : 'ganó con menos cartas';
-    nameEl.textContent  = `${state.winnerName || '?'} ${winLabel}`;
+    titleEl.textContent = t('w.vote');
+    nameEl.textContent = t(state.winCondition === 'points' ? 'w.byPoints' : 'w.byCards', { name: state.winnerName || '?' });
   } else if (reason === 'lastPlayer') {
-    titleEl.textContent = '🏆 ¡Último en pie!';
+    titleEl.textContent = t('w.last');
     nameEl.textContent  = state.winnerName || '?';
   } else {
-    titleEl.textContent = '🎉 ¡Ganador!';
+    titleEl.textContent = t('w.winner');
     nameEl.textContent  = state.winnerName || '?';
   }
 
@@ -3678,13 +3745,16 @@ function renderWinner(state) {
       `<div class="standing-row ${s.id === state.winner ? 'winner-row' : ''}">
         <span class="standing-rank">#${i + 1}</span>
         <span class="standing-name">${esc(s.name)}</span>
-        <span class="standing-stats">${s.cards} cartas · ${s.points} pts</span>
+        <span class="standing-stats">${t('w.standing', { c: s.cards, p: s.points })}</span>
       </div>`
     ).join('');
     standingsEl.classList.remove('hidden');
   } else {
     standingsEl.classList.add('hidden');
   }
+
+  // Confetti, everyone's cards left, awards, room score, my stats + badges (extras.js)
+  if (typeof afterWinnerRender === 'function') afterWinnerRender(state);
 }
 
 function showJoinAnother() {
@@ -3693,14 +3763,14 @@ function showJoinAnother() {
 
 async function handleJoinAnother() {
   const code = document.getElementById('winner-room-code').value.trim().toUpperCase();
-  if (code.length !== 6) { showWinnerError('Introduce el código de sala de 6 caracteres'); return; }
-  if (!localUid) { showWinnerError('Aún conectando… intenta de nuevo'); return; }
+  if (code.length !== 6) { showWinnerError(t('err.code')); return; }
+  if (!localUid) { showWinnerError(t('err.connecting')); return; }
 
   const snap = await db.collection('rooms').doc(code).get();
-  if (!snap.exists) { showWinnerError('Sala no encontrada'); return; }
+  if (!snap.exists || (snap.data()?.game && snap.data().game !== 'fiesta')) { showWinnerError(t('err.notFound')); return; }
   const data = snap.data();
-  if (data.status !== 'lobby') { showWinnerError('La partida ya comenzó'); return; }
-  if (data.players.length >= 10) { showWinnerError('Sala llena (máximo 10)'); return; }
+  if (data.status !== 'lobby') { showWinnerError(t('err.started')); return; }
+  if (data.players.length >= 10) { showWinnerError(t('err.full', { n: 10 })); return; }
 
   if (roomUnsub) { roomUnsub(); roomUnsub = null; }
 
@@ -3826,7 +3896,7 @@ async function joinVoice() {
       video: false,
     });
   } catch (e) {
-    showVoiceToast('No se pudo acceder al micrófono');
+    showVoiceToast(t('vc.noMic'));
     return;
   }
 
@@ -4065,14 +4135,14 @@ function updateVoiceButton() {
   btn.classList.remove('voice-active', 'voice-muted', 'voice-self-speaking');
   if (voiceState === 'off') {
     btn.textContent = '🎤';
-    btn.title = 'Unirse al chat de voz';
+    btn.title = t('vc.join');
   } else if (voiceState === 'on') {
     btn.textContent = '🎤';
-    btn.title = 'Silenciar micrófono';
+    btn.title = t('vc.mute');
     btn.classList.add('voice-active');
   } else {
     btn.textContent = '🔇';
-    btn.title = 'Salir del chat de voz';
+    btn.title = t('vc.leave');
     btn.classList.add('voice-muted');
   }
 }
@@ -4108,17 +4178,65 @@ function botGenUid() {
 
 const BOT_NAMES = ['🤖 Robo', '🤖 Chip', '🤖 Bleep', '🤖 Zap', '🤖 Mec', '🤖 Unit'];
 
+// ---- Bot personalities and levels (idea G2) ----
+// Each bot gets a personality when it's added (its name shows it); it changes which
+// card the bot prefers when it has several it could play. The host picks the level
+// for all bots in the lobby (room.botLevel).
+//   random     — chance of just playing any playable card
+//   unoCatch   — chance per bot tick of catching someone who didn't shout UNO
+//   unoShoutMs — how long a bot takes to shout UNO for itself
+//   w4Insight  — chance a bot challenges a Wild +4 it could win (else it accepts)
+//   smartPoint — points at whoever has fewest cards (else at anyone)
+const BOT_PERSONAS = {
+  attacker: { name: 'Petardo',    icon: '💥', likes: ['draw2', 'wild4', 'skip', 'reverse'] },
+  party:    { name: 'Fiestero',   icon: '🎉', likes: ['pointTaken', 'wildPileUp', 'wildDrawnTogether'] },
+  saver:    { name: 'Ahorrador',  icon: '🧐', likes: ['1', '2', '3', '4', '5', '6', '7', '8', '9'] },
+  rainbow:  { name: 'Arcoíris',   icon: '🌈', likes: [] },
+  balanced: { name: 'Robo',       icon: '🤖', likes: [] }
+};
+const BOT_ORDER = ['attacker', 'party', 'saver', 'rainbow', 'balanced'];
+const BOT_LEVELS = {
+  easy:   { random: .4, unoCatch: .15, unoShoutMs: 6000, w4Insight: .5,  smartPoint: false },
+  normal: { random: 0,  unoCatch: .4,  unoShoutMs: 5000, w4Insight: .85, smartPoint: true },
+  hard:   { random: 0,  unoCatch: .75, unoShoutMs: 1500, w4Insight: 1,   smartPoint: true }
+};
+const botLevel = state => BOT_LEVELS[state?.botLevel] || BOT_LEVELS.normal;
+function pickBotPersona(players) {
+  const used = new Set(players.filter(p => isBot(p.id)).map(p => p.persona));
+  return BOT_ORDER.find(k => !used.has(k)) || BOT_ORDER[players.length % BOT_ORDER.length];
+}
+// A new bot with the next free personality; its name shows who it is
+function makeBot(players) {
+  const persona = pickBotPersona(players);
+  const P = BOT_PERSONAS[persona];
+  return { id: botGenUid(), name: getUniqueName(`${P.icon} ${P.name}`, players), cardCount: 0, isBot: true, persona };
+}
+// The personality's favourite among the playable cards (null = keep the usual choice)
+function botPersonaPick(state, botId, playable) {
+  const bot = state.players.find(p => p.id === botId);
+  const P = BOT_PERSONAS[bot?.persona];
+  const lvl = botLevel(state);
+  if (lvl.random && Math.random() < lvl.random) return playable[Math.floor(Math.random() * playable.length)];
+  if (!P) return null;
+  if (bot.persona === 'rainbow') {
+    // keep the colour it has most of
+    const hand = state.hands?.[botId] || [];
+    const best = botPickColor(hand);
+    return playable.find(({ card }) => card.color === best) || null;
+  }
+  for (const v of P.likes) {
+    const hit = playable.find(({ card }) => card.value === v);
+    if (hit) return hit;
+  }
+  return null;
+}
+
 async function handleAddBot() {
   if (!roomState || roomState.hostId !== localUid) return;
   if (roomState.players.length >= 10) return;
   const usedNames = roomState.players.map(p => p.name);
-  const availName = BOT_NAMES.find(n => !usedNames.includes(n)) ||
-    `🤖 Bot${roomState.players.length}`;
-  const botUid = botGenUid();
   await db.collection('rooms').doc(currentRoomId).update({
-    players: firebase.firestore.FieldValue.arrayUnion(
-      { id: botUid, name: availName, cardCount: 0, isBot: true }
-    ),
+    players: firebase.firestore.FieldValue.arrayUnion(makeBot(roomState.players)),
     lastActivity: firebase.firestore.FieldValue.serverTimestamp()
   });
 }
@@ -4170,8 +4288,12 @@ async function doBotTick(state) {
 }
 
 async function runBotTick(state) {
-  // Bots opportunistically catch players who forgot to say UNO (~40% chance per tick)
-  if (state.unoCallRequired && Math.random() < 0.4) {
+  // Guided first game: the Profe follows the lesson script (tutorial.js)
+  if (LOCAL_GAME) { await tutorialBotTick(state); return; }
+  // A bot move can still be scheduled right after the host leaves the room: skip it
+  if (!currentRoomId) return;
+  // Bots opportunistically catch players who forgot to say UNO (chance by bot level)
+  if (state.unoCallRequired && Math.random() < botLevel(state).unoCatch) {
     const req = state.unoCallRequired;
     const catchers = state.players.filter(p => isBot(p.id) && p.id !== req.playerId && !p.disconnected);
     if (catchers.length > 0) {
@@ -4255,7 +4377,8 @@ async function botWild4ChallengeDecide(state) {
     c.color === ch.prevTopColor ||
     c.value === ch.prevTopValue
   );
-  const challengeWins = alternatives.length > 0;
+  // The bot challenges when it would win — easier bots sometimes miss it and accept
+  const challengeWins = alternatives.length > 0 && Math.random() < botLevel(state).w4Insight;
 
   let { hands, players, drawPile } = state;
   let log = state.log;
@@ -4324,9 +4447,9 @@ async function botPointTakenVote(state, bots) {
   for (const bot of bots) {
     const candidates = state.players.filter(p => p.id !== bot.id && !p.disconnected);
     if (!candidates.length) continue;
-    const target = candidates.reduce((a, b) =>
-      (b.cardCount || 0) < (a.cardCount || 0) ? b : a
-    );
+    const target = botLevel(state).smartPoint
+      ? candidates.reduce((a, b) => (b.cardCount || 0) < (a.cardCount || 0) ? b : a)
+      : candidates[Math.floor(Math.random() * candidates.length)];
     votes[bot.id] = target.id;
   }
 
@@ -4478,6 +4601,8 @@ async function botDoTurn(state, botId, botName) {
     const w       = wilds.find(({ card }) => card.value === 'wild');
     chosen = pile || together || w4 || w || wilds[0];
   }
+  // Personality / level may prefer another playable card (G2)
+  chosen = botPersonaPick(state, botId, playable) || chosen;
 
   await botPlayCard(state, botId, botName, chosen.card, chosen.idx);
 }

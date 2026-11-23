@@ -270,3 +270,94 @@ body.calm .dir-ring ellipse, body.calm .dir-ring.flip { animation: none; }
   z-index: 6;
 }
 .player-hand.fitted .card.cant-play:hover { translate: 0 calc(var(--lift, 0px) - 6px); }
+
+/* ============================================================
+   4. PLAYERS AROUND THE TABLE
+   Bigger faces in a ring, a spinning gold ring + "SU TURNO" tag on whoever's turn it
+   is, a red "¡UNO!" tag at one card, and their cards as a small fan of backs.
+   ============================================================ */
+.opponents-row {
+  background: transparent;
+  justify-content: safe center;
+  gap: .9rem;
+  padding: .75rem .9rem .5rem;
+  min-height: 0;
+}
+#opponents-row .opponent {
+  position: relative;
+  gap: .15rem;
+  padding: .55rem .8rem .45rem;
+  min-width: 96px;
+  border-radius: 16px;
+  background: rgba(0,0,0,.28);
+  outline: none;
+  box-shadow: none;
+  animation: none;
+  overflow: visible;
+}
+.opponent.active-player { background: rgba(255,213,74,.1); }
+/* the face sits in a ring */
+.seat-ring {
+  position: relative;
+  border-radius: 50%;
+  padding: 3px;
+  background: rgba(255,255,255,.18);
+  line-height: 0;
+  margin-bottom: .1rem;
+}
+#opponents-row .seat-face { width: 46px; height: 46px; }
+.opponent.active-player .seat-ring::before {
+  content: '';
+  position: absolute; inset: -4px;
+  border-radius: 50%;
+  background: conic-gradient(var(--lk-gold), var(--lk-pink), var(--lk-gold));
+  -webkit-mask: radial-gradient(circle, transparent 58%, #000 60%);
+          mask: radial-gradient(circle, transparent 58%, #000 60%);
+  animation: lk-spin 2.4s linear infinite;
+}
+@keyframes lk-spin { to { transform: rotate(1turn); } }
+.opponent.near-win .seat-ring { background: rgba(255,70,70,.75); box-shadow: 0 0 14px rgba(255,60,60,.6); }
+.opponent-name {
+  font-family: var(--lk-display); font-weight: 400;
+  font-size: .95rem; letter-spacing: .3px;
+  max-width: 110px;
+}
+/* tags */
+.seat-pill {
+  position: absolute; top: -9px; right: -6px; z-index: 2;
+  font-size: .58rem; font-weight: 900; letter-spacing: 1px;
+  padding: 2px 7px; border-radius: 99px;
+  background: var(--lk-gold); color: var(--lk-out);
+  box-shadow: 0 2px 6px rgba(0,0,0,.4);
+  white-space: nowrap;
+}
+.seat-pill-uno { background: #e8343b; color: #fff; animation: lk-pulse 1s ease-in-out infinite; }
+@keyframes lk-pulse { 50% { transform: scale(1.12); } }
+/* small fan of card backs */
+.opponent-cards {
+  flex-wrap: nowrap; gap: 0;
+  height: 30px; align-items: flex-end;
+  padding: 0 4px;
+}
+.opponent-cards .card-back.mini {
+  width: 17px; height: 25px;
+  margin-left: -9px;
+  border-radius: 3px;
+  border: 1.5px solid var(--lk-white);
+  background:
+    radial-gradient(var(--lk-gold) .9px, transparent 1.3px) 0 0 / 6px 6px,
+    linear-gradient(160deg, #3b1030, #14060f);
+  transform-origin: 50% 120%;
+  rotate: calc((var(--k) - (var(--n) - 1) / 2) * 7deg);
+  box-shadow: 0 2px 4px rgba(0,0,0,.5);
+}
+.opponent-cards .card-back.mini:first-child { margin-left: 0; }
+.opponent-count { font-size: .68rem; font-weight: 800; color: rgba(255,255,255,.65); }
+body.calm .opponent.active-player .seat-ring::before, body.calm .seat-pill-uno { animation: none; }
+
+@media (max-height: 700px) {
+  #opponents-row .seat-face { width: 34px; height: 34px; }
+  #opponents-row .opponent { padding: .4rem .6rem .3rem; min-width: 84px; }
+  .opponent-cards { height: 24px; }
+  .opponent-cards .card-back.mini { width: 14px; height: 20px; margin-left: -8px; }
+}

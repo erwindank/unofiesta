@@ -1282,8 +1282,10 @@ function renderOpponents(state) {
     const hasVoice = !!peerConns[p.id];
     const isLinked = linked.includes(p.id);
     const isEchoed = echoPenalty?.echoedPlayerId === p.id;
-    const miniCards = Array(Math.min(p.cardCount, 12)).fill(0)
-      .map(() => `<div class="card-back mini"></div>`).join('');
+    // new look: the backs fan out (--k = position, --n = how many are shown)
+    const shownBacks = Math.min(p.cardCount, 10);
+    const miniCards = Array(shownBacks).fill(0)
+      .map((_, k) => `<div class="card-back mini" style="--k:${k}"></div>`).join('');
     // B3: 1–2 cards left glows red; Y5: "Reconectando…" while their connection is gone
     const nearWin = p.cardCount > 0 && p.cardCount <= 2;
     const reconnecting = !isDisconnected && !isBot(p.id) && presenceMissingSince[p.id];
@@ -1294,11 +1296,12 @@ function renderOpponents(state) {
                  data-uid="${esc(p.id)}">
       ${isLinked ? '<div class="linked-badge">🔗 ENLAZADO</div>' : ''}
       ${isEchoed ? '<div class="linked-badge" style="background:var(--warning,#e67e22)">⚡ ECO</div>' : ''}
-      ${typeof seatFaceHTML === 'function' ? seatFaceHTML(state, p) : ''}
+      ${isCurrent ? `<span class="seat-pill seat-pill-turn">${t('seat.turn')}</span>` : p.cardCount === 1 ? `<span class="seat-pill seat-pill-uno">${t('seat.uno')}</span>` : ''}
+      <div class="seat-ring">${typeof seatFaceHTML === 'function' ? seatFaceHTML(state, p) : ''}</div>
       <div class="opponent-name">${esc(p.name)}${isDisconnected ? ` <span class="dc-badge">${t('lob.dc')}</span>` : ''}${hasVoice ? ' <span class="voice-mic-icon">🎤</span>' : ''}</div>
       ${reconnecting ? `<span class="rc-badge" data-since="${presenceMissingSince[p.id]}" data-turn="${isCurrent ? 1 : 0}">Reconectando…</span>` : ''}
-      <div class="opponent-cards">${miniCards}</div>
-      <div class="opponent-count">${p.cardCount}🃏</div>
+      <div class="opponent-cards" style="--n:${shownBacks}">${miniCards}</div>
+      <div class="opponent-count">${t(p.cardCount === 1 ? 'seat.card' : 'seat.cards', { n: p.cardCount })}</div>
     </div>`;
   }).join('');
 }

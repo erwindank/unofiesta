@@ -71,3 +71,11 @@ function lookDirectionHTML(direction) {
   }
   return '';
 }
+
+// ---- 4. Seats: words used on the players around the table -----------------
+addStrings({
+  'seat.turn':  ['SU TURNO', 'THEIR TURN'],
+  'seat.uno':   ['¡UNO!', 'UNO!'],
+  'seat.card':  ['{n} carta', '{n} card'],
+  'seat.cards': ['{n} cartas', '{n} cards']
+});

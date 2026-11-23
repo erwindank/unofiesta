@@ -44,3 +44,30 @@ function lookWildCenterHTML(value) {
   const inner = value === 'wild4' ? `<span class="card-label center">+4</span>` : lookIconHTML(value);
   return `<span class="wild-diamond"></span>${inner}`;
 }
+
+// ---- 2. Table: direction ring around the piles ----------------------------
+// Called from directionCardHTML() in app.js on every render. Keeps one SVG ring inside
+// .pile-area; the dashes march clockwise (direction 1) or the other way (-1).
+let _lookDir = null;
+function lookDirectionHTML(direction) {
+  const area = document.querySelector('#screen-game .pile-area');
+  if (area) {
+    let ring = area.querySelector('.dir-ring');
+    if (!ring) {
+      ring = document.createElement('div');
+      ring.className = 'dir-ring';
+      ring.setAttribute('aria-hidden', 'true');
+      ring.innerHTML = `<svg viewBox="0 0 100 100" preserveAspectRatio="none"><ellipse cx="50" cy="50" rx="48" ry="46" vector-effect="non-scaling-stroke"/></svg>
+        <span class="dir-arrow dir-arrow-r"></span><span class="dir-arrow dir-arrow-l"></span>`;
+      area.prepend(ring);
+    }
+    const ccw = direction !== 1;
+    ring.classList.toggle('ccw', ccw);
+    // a quick flash when a Reverse changes the direction
+    if (_lookDir !== null && _lookDir !== direction) {
+      ring.classList.remove('flip'); void ring.offsetWidth; ring.classList.add('flip');
+    }
+    _lookDir = direction;
+  }
+  return '';
+}

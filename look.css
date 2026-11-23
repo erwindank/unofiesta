@@ -170,3 +170,75 @@
   -webkit-text-stroke: 2px var(--lk-out); paint-order: stroke fill;
   transform: rotate(-12deg);
 }
+
+/* ============================================================
+   2. A REAL TABLE
+   The piles sit on a round felt table with a wooden rim and a soft light in the
+   middle. The drifting colour circles (extras.css Y8) are switched off, and the
+   dashed ring around the piles (look.js) replaces the ↻ direction card.
+   ============================================================ */
+#screen-game::before { display: none; }
+#screen-game {
+  background:
+    radial-gradient(ellipse at 50% 45%, rgba(0,0,0,0) 40%, rgba(0,0,0,.45) 100%),
+    radial-gradient(ellipse at 50% 25%, #6e1048 0%, #3e0a27 55%, #22061a 100%);
+}
+.direction-indicator { display: none; }
+.game-table .pile-area {
+  position: relative;
+  isolation: isolate;
+  gap: 2rem;
+  padding: 42px 84px 34px;
+  margin-top: .3rem;
+}
+/* felt + wooden rim */
+.game-table .pile-area::before {
+  content: '';
+  position: absolute; inset: 0;
+  border-radius: 50%;
+  z-index: -1;
+  background:
+    radial-gradient(ellipse at 50% 42%, rgba(255,220,240,.2), rgba(255,220,240,0) 55%),
+    repeating-radial-gradient(circle at 30% 30%, rgba(255,255,255,.025) 0 1px, transparent 1px 3px),
+    radial-gradient(ellipse at center, #8a1a5c, #3d0a29 80%);
+  box-shadow:
+    0 0 0 7px #3c1a12, 0 0 0 9px #6b3a23, 0 0 0 10px #200b07,
+    0 18px 40px rgba(0,0,0,.55), inset 0 0 40px rgba(0,0,0,.55);
+}
+.game-table .pile-label { color: rgba(255,255,255,.7); font-weight: 800; letter-spacing: 1.2px; font-size: .62rem; }
+
+/* direction ring */
+.dir-ring { position: absolute; inset: 12px 22px; z-index: -1; pointer-events: none; }
+.dir-ring svg { width: 100%; height: 100%; overflow: visible; display: block; }
+.dir-ring ellipse {
+  fill: none; stroke: var(--lk-gold); stroke-width: 2.5; opacity: .6;
+  stroke-dasharray: 9 11;
+  animation: lk-march 1.4s linear infinite;
+}
+.dir-ring.ccw ellipse { animation-direction: reverse; }
+@keyframes lk-march { to { stroke-dashoffset: -40; } }
+/* arrowheads on the left and right ends of the ring */
+.dir-arrow {
+  position: absolute; top: 50%; width: 0; height: 0;
+  border-left: 6px solid transparent; border-right: 6px solid transparent;
+  border-top: 10px solid var(--lk-gold);
+  opacity: .85;
+}
+.dir-arrow-r { right: -5px; transform: translateY(-50%); }                 /* clockwise: down on the right */
+.dir-arrow-l { left: -5px;  transform: translateY(-50%) rotate(180deg); }  /* …and up on the left */
+.dir-ring.ccw .dir-arrow-r { transform: translateY(-50%) rotate(180deg); }
+.dir-ring.ccw .dir-arrow-l { transform: translateY(-50%); }
+.dir-ring.flip { animation: lk-dir-flip .7s ease-out; }
+@keyframes lk-dir-flip {
+  0%   { transform: scale(1);    filter: drop-shadow(0 0 0 var(--lk-gold)); }
+  40%  { transform: scale(1.08); filter: drop-shadow(0 0 10px var(--lk-gold)); }
+  100% { transform: scale(1);    filter: drop-shadow(0 0 0 var(--lk-gold)); }
+}
+body.calm .dir-ring ellipse, body.calm .dir-ring.flip { animation: none; }
+
+@media (max-height: 650px) {
+  .game-table .pile-area { padding: 30px 64px 24px; gap: 1.4rem; }
+}
+@media (max-width: 380px) {
+  .game-table .pile-area { padding: 36px 54px 28px; gap: 1.4rem; }
+}

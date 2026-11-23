@@ -1304,6 +1304,8 @@ function renderOpponents(state) {
 }
 
 function directionCardHTML(direction) {
+  // new look (look.js): a moving ring around the piles shows the direction instead
+  if (typeof lookDirectionHTML === 'function') return lookDirectionHTML(direction);
   const symbol = direction === 1 ? '↻' : '↺';
   return `<div class="card black direction-card"><span class="card-label center">${symbol}</span></div>`;
 }

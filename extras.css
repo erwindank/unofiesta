@@ -244,12 +244,26 @@ body.calm .rc-badge { animation: none; }
 .winner-extra { display: flex; flex-direction: column; gap: .8rem; text-align: left; }
 .winner-extra:empty { display: none; }
 .win-sec { display: flex; flex-direction: column; gap: .4rem; }
-.award-list { display: grid; grid-template-columns: 1fr 1fr; gap: .4rem; }
-.award { display: flex; gap: .5rem; align-items: center; padding: .45rem .55rem; border-radius: 10px; background: var(--bg); border: 1px solid var(--border); min-width: 0; }
-.award-icon { font-size: 1.4rem; line-height: 1; }
-.award-text { display: flex; flex-direction: column; min-width: 0; }
-.award-text b { font-size: .8rem; }
-.award-text span { font-size: .7rem; color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+/* Game awards: one full-width row each — gold medal icon, then title / winner /
+   reason on their own lines, so nothing gets cut off (was two columns + "…") */
+.award-list { display: grid; grid-template-columns: 1fr; gap: .45rem; }
+.award {
+  display: flex; gap: .75rem; align-items: center; min-width: 0;
+  padding: .6rem .8rem; border-radius: 14px;
+  background: linear-gradient(90deg, rgba(245,192,74,.10), rgba(255,255,255,.03) 60%);
+  border: 1px solid rgba(245,192,74,.25);
+}
+.award-icon {
+  flex: none; width: 44px; height: 44px; border-radius: 50%;
+  display: grid; place-items: center; font-size: 1.45rem; line-height: 1;
+  background: radial-gradient(circle at 35% 30%, #ffe08a, #f5c04a 55%, #a87a14);
+  box-shadow: 0 0 0 2px rgba(255,255,255,.25), 0 4px 10px rgba(0,0,0,.4);
+}
+.award-text { display: flex; flex-direction: column; align-items: flex-start; gap: 1px; min-width: 0; text-align: left; }
+.award-text b { font-family: 'Oswald', 'Arial Narrow', sans-serif; font-size: .95rem; letter-spacing: .04em; text-transform: uppercase; color: #f5c04a; }
+.award-text span { white-space: normal; overflow-wrap: anywhere; }
+.award-text .award-who { font-size: .9rem; font-weight: 700; color: var(--text, #eef2fb); }
+.award-text .award-why { font-size: .8rem; color: rgba(255,255,255,.72); }
 .series { display: flex; flex-wrap: wrap; gap: .35rem; }
 .series-item { padding: .25rem .6rem; border-radius: 999px; background: var(--bg); border: 1px solid var(--border); font-size: .8rem; }
 .series-item b { color: var(--yellow); margin-left: .2rem; font-variant-numeric: tabular-nums; }

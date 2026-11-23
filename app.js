@@ -65,15 +65,25 @@ function buildCardHTML(card, extraStyle) {
   const lbl = VALUE_LABEL[card.value];
   const isWild = WILDS.includes(card.value);
   const isParty = ['pointTaken','wildPileUp','wildDrawnTogether'].includes(card.value);
-  const centerHTML = isWild ? wildCenterHTML(card.value)
-    : card.value === 'reverse' ? reverseCenterHTML()
-    : `<span class="card-label center">${lbl}</span>`;
+  const centerHTML = cardCenterHTML(card.value);
   return `<div class="card ${card.color}${isParty ? ' party' : ''}"${extraStyle ? ` style="${extraStyle}"` : ''}>
     ${cornerLabelHTML(card.value,'tl')}${centerHTML}${cornerLabelHTML(card.value,'br')}
   </div>`;
 }
 
+// Centre of a card face: wilds → wildCenterHTML, drawn pictures from look.js
+// (skip, reverse, party cards), otherwise the big number / +2.
+function cardCenterHTML(value) {
+  if (WILDS.includes(value)) return wildCenterHTML(value);
+  const icon = typeof lookIconHTML === 'function' ? lookIconHTML(value) : '';
+  if (icon) return icon;
+  if (value === 'reverse') return reverseCenterHTML();
+  return `<span class="card-label center">${VALUE_LABEL[value]}</span>`;
+}
+
 function cornerLabelHTML(value, posClass) {
+  // new look (look.js): small drawn pictures in the corners
+  if (typeof lookCornerHTML === 'function') return lookCornerHTML(value, posClass);
   const lbl = VALUE_LABEL[value];
   return `<span class="card-label ${posClass}">${lbl}</span>`;
 }
@@ -83,6 +93,8 @@ function reverseCenterHTML() {
 }
 
 function wildCenterHTML(value) {
+  // new look (look.js): four-colour diamond + "+4" or a drawn picture
+  if (typeof lookWildCenterHTML === 'function') return lookWildCenterHTML(value);
   let label = '';
   if (value === 'wild4') label = '+4';
   else if (value === 'pointTaken') label = '☝️';
@@ -1252,11 +1264,7 @@ function renderTopCard(state) {
   const isReverse = state.topValue === 'reverse';
   const tlHTML = cornerLabelHTML(state.topValue, 'tl');
   const brHTML = cornerLabelHTML(state.topValue, 'br');
-  el.innerHTML = isWild
-    ? `${tlHTML}${wildCenterHTML(state.topValue)}${brHTML}`
-    : isReverse
-    ? `${tlHTML}${reverseCenterHTML()}${brHTML}`
-    : `${tlHTML}<span class="card-label center">${lbl}</span>${brHTML}`;
+  el.innerHTML = `${tlHTML}${cardCenterHTML(state.topValue)}${brHTML}`;
 }
 
 function renderOpponents(state) {
@@ -1360,9 +1368,7 @@ function renderHand(state) {
     }
     const lbl = VALUE_LABEL[card.value];
     const isWild = WILDS.includes(card.value);
-    const centerHTML = isWild ? wildCenterHTML(card.value)
-      : card.value === 'reverse' ? reverseCenterHTML()
-      : `<span class="card-label center">${lbl}</span>`;
+    const centerHTML = cardCenterHTML(card.value);
     return `<div class="card ${card.color}${isPlayable ? ' playable' : ''}${extraClass}"
       data-index="${i}"
       onclick="${onclick}"
@@ -2335,9 +2341,7 @@ async function selectCard(index) {
   const preview = document.getElementById('actual-card-preview');
   const _lbl = VALUE_LABEL[card.value];
   const _isWild = WILDS.includes(card.value);
-  const _centerHTML = _isWild ? wildCenterHTML(card.value)
-    : card.value === 'reverse' ? reverseCenterHTML()
-    : `<span class="card-label center" style="font-size:1.2rem">${_lbl}</span>`;
+  const _centerHTML = cardCenterHTML(card.value);
   preview.innerHTML = `<div class="card ${card.color}" style="width:50px;height:75px;margin:0 auto">
     ${cornerLabelHTML(card.value, 'tl')}
     ${_centerHTML}
@@ -2932,9 +2936,7 @@ function renderWild4ChallengeArea(state) {
       const playable = isW4Alternative(card, ch);
       const lbl = VALUE_LABEL[card.value];
       const isWild = WILDS.includes(card.value);
-      const center = isWild ? wildCenterHTML(card.value)
-        : card.value === 'reverse' ? reverseCenterHTML()
-        : `<span class="card-label center">${lbl}</span>`;
+      const center = cardCenterHTML(card.value);
       return `<div class="card ${card.color} ${playable ? 'w4c-playable' : 'w4c-dim'}">
         ${cornerLabelHTML(card.value, 'tl')}${center}${cornerLabelHTML(card.value, 'br')}
       </div>`;

@@ -1,0 +1,172 @@
+/* ============================================================
+   UNO Fiesta — NEW LOOK (7 ideas from the "UNO Fiesta New Look" mock-up, 2026-11-22)
+   Loaded after style.css and extras.css; style.css stays untouched.
+   1 card faces · 2 table · 3 hand fan · 4 seats · 5 title screen · 6 font + buttons · 7 movement
+   ============================================================ */
+:root {
+  --lk-white: #fbf6ef;      /* card border + diamond */
+  --lk-out:   #1b0d14;      /* dark outline used on numbers and pictures */
+  --lk-gold:  #ffd54a;
+  --lk-pink:  #ff4f9a;
+  --lk-display: 'Lilita One', 'Arial Black', Impact, sans-serif;
+  --lk-body:    'Nunito', 'Segoe UI', system-ui, sans-serif;
+}
+
+/* ============================================================
+   1. REAL CARD FACES
+   White border, coloured face with a light confetti dot pattern and a shine,
+   a tilted white diamond in the middle, a big outlined number (or a drawn picture).
+   Sizes inside the card use cqw (percent of the card's width), so the same
+   rules work for the hand, the discard pile, previews and the zoom.
+   ============================================================ */
+.card.red    { --cc: #e8343b; --cc2: #ff6a5c; }
+.card.yellow { --cc: #f5ac1d; --cc2: #ffd35a; }
+.card.green  { --cc: #22a454; --cc2: #55d27f; }
+.card.blue   { --cc: #2c6ae0; --cc2: #5c95ff; }
+.card.black  { --cc: #1a1220; --cc2: #3d2a45; }
+
+.card.red, .card.yellow, .card.green, .card.blue, .card.black {
+  container-type: inline-size;
+  color: #fff;
+  border: 3px solid var(--lk-white);
+  border-radius: 10px;
+  background-color: var(--cc);
+  background-image:
+    radial-gradient(rgba(255,255,255,.16) 1.2px, transparent 1.8px),
+    linear-gradient(160deg, var(--cc2), var(--cc) 62%);
+  background-size: 9px 9px, 100% 100%;
+  box-shadow: 0 1px 0 rgba(255,255,255,.5) inset, 0 5px 12px rgba(0,0,0,.45), 0 2px 0 rgba(0,0,0,.35);
+}
+/* the drawn pictures replace the dashed "party" frame */
+.card.party { outline: none; }
+
+/* the white diamond */
+.card.red::before, .card.yellow::before, .card.green::before, .card.blue::before, .card.black::before {
+  content: '';
+  position: absolute;
+  left: 50%; top: 50%;
+  width: 66%; aspect-ratio: 1; height: auto;
+  transform: translate(-50%, -50%) rotate(45deg);
+  background: var(--lk-white);
+  border-radius: 24%;
+  box-shadow: 0 0 0 2px var(--lk-out), 2px 2px 0 2px rgba(0,0,0,.3);
+  z-index: 0;
+  pointer-events: none;
+}
+/* the shine across the top */
+.card.red::after, .card.yellow::after, .card.green::after, .card.blue::after, .card.black::after {
+  content: '';
+  position: absolute; inset: 0;
+  background: linear-gradient(155deg, rgba(255,255,255,.3) 0 24%, rgba(255,255,255,0) 25%);
+  pointer-events: none;
+  z-index: 0;
+}
+/* wilds: four-colour diamond on top of the white one */
+.card .wild-diamond {
+  position: absolute; left: 50%; top: 50%;
+  width: 66%; aspect-ratio: 1;
+  transform: translate(-50%, -50%) rotate(45deg);
+  border-radius: 24%;
+  background: conic-gradient(#e8343b 0 25%, #2c6ae0 0 50%, #22a454 0 75%, #f5ac1d 0);
+  z-index: 1;
+}
+.card .wild-quad, .card .wild-extra-label { display: none; }
+
+/* big number / +2 / +4 */
+.card .card-label.center,
+#top-card .card-label.center,
+.player-hand .card .card-label.center {
+  position: relative; z-index: 2;
+  font-family: var(--lk-display);
+  font-weight: 400;
+  font-size: 52cqw !important;   /* !important: beats the many fixed rem sizes in style/extras */
+  line-height: 1;
+  color: var(--cc);
+  -webkit-text-stroke: 3.2cqw var(--lk-out);
+  paint-order: stroke fill;
+  text-shadow: 3cqw 3.5cqw 0 var(--lk-out);
+}
+.card.black .card-label.center,
+.card .wild-diamond ~ .card-label.center { color: #fff; }
+/* drawn picture in the middle */
+.card .card-icon {
+  position: relative; z-index: 2;
+  width: 48cqw; display: grid; place-items: center;
+  color: var(--cc);
+  filter: drop-shadow(2.5cqw 3cqw 0 rgba(27,13,20,.9));
+}
+.card .card-icon svg { width: 100%; height: auto; overflow: visible; }
+.card .wild-diamond ~ .card-icon { color: #fff; }
+.card .reverse-center { display: none; }
+
+/* corners */
+.card .card-label.tl, .card .card-label.br,
+.card.yellow .card-label.tl, .card.yellow .card-label.br {
+  z-index: 2;
+  font-family: var(--lk-display);
+  font-weight: 400;
+  font-size: 17cqw;
+  line-height: 1;
+  color: #fff;
+  -webkit-text-stroke: 2.4cqw var(--lk-out);
+  paint-order: stroke fill;
+}
+.card .card-label.tl { top: 5cqw; left: 7cqw; }
+.card .card-label.br { bottom: 5cqw; right: 7cqw; }
+.card .card-label.has-icon { width: 17cqw; color: #fff; display: grid; }
+.card .card-label.has-icon svg { width: 100%; height: auto; }
+.card .corner-quad {
+  display: block; width: 100%; aspect-ratio: 1; border-radius: 3px;
+  background: conic-gradient(#e8343b 0 25%, #2c6ae0 0 50%, #22a454 0 75%, #f5ac1d 0);
+  box-shadow: 0 0 0 1.5px var(--lk-out);
+}
+
+/* ---- card back (draw pile, flying cards, +4 challenge) ---- */
+.draw-pile .card-back,
+.fx-fly .card-back.fly-back,
+.card-back.w4c-facedown {
+  border: 3px solid var(--lk-white);
+  border-radius: 10px;
+  background:
+    radial-gradient(var(--lk-gold) 1.2px, transparent 1.8px) 0 0 / 14px 14px,
+    radial-gradient(var(--lk-pink) 1.2px, transparent 1.8px) 7px 7px / 14px 14px,
+    linear-gradient(160deg, #3b1030, #14060f);
+  box-shadow: 0 5px 12px rgba(0,0,0,.5), 0 2px 0 rgba(0,0,0,.35);
+  position: relative; overflow: hidden;
+  display: flex; flex-direction: column; align-items: center; justify-content: center;
+}
+/* pink diamond badge behind the name */
+.draw-pile .card-back::before,
+.fx-fly .card-back.fly-back::before,
+.card-back.w4c-facedown::before {
+  content: ''; display: block;
+  position: absolute; left: 50%; top: 50%;
+  width: 66%; height: auto; aspect-ratio: 1;
+  transform: translate(-50%, -50%) rotate(45deg);
+  background: linear-gradient(160deg, var(--lk-pink), #b8125e);
+  border-radius: 24%;
+  box-shadow: 0 0 0 2px var(--lk-out);
+  z-index: 0;
+}
+.draw-pile .card-back .back-uno,
+.fx-fly .card-back.fly-back .back-uno,
+.card-back.w4c-facedown .back-uno {
+  position: relative; z-index: 1;
+  background: none; border: 0; padding: 0;
+  font-family: var(--lk-display); font-weight: 400;
+  font-size: 1.15rem; letter-spacing: .5px; line-height: 1;
+  color: var(--lk-gold);
+  text-shadow: none;
+  -webkit-text-stroke: 3px var(--lk-out); paint-order: stroke fill;
+  transform: rotate(-12deg);
+}
+.draw-pile .card-back .back-party,
+.fx-fly .card-back.fly-back .back-party {
+  position: relative; z-index: 1;
+  background: none; padding: 0; margin-top: 1px;
+  font-family: var(--lk-display); font-weight: 400;
+  font-size: .5rem; letter-spacing: 1px; line-height: 1;
+  color: #fff;
+  -webkit-text-stroke: 2px var(--lk-out); paint-order: stroke fill;
+  transform: rotate(-12deg);
+}

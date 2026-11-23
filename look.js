@@ -89,3 +89,87 @@ document.addEventListener('DOMContentLoaded', () => {
   fan.innerHTML = [['red','5'], ['yellow','draw2'], ['green','7'], ['blue','reverse']]
     .map(([color, value]) => buildCardHTML({ color, value })).join('');
 });
+
+// ---- 7. Movement -------------------------------------------------------------
+// Uses FX (fx.js) for the effect layer and the calm-mode setting.
+const _lookMotion = () => typeof FX === 'undefined' || FX.motion();
+const _lookMid = r => ({ x: r.left + r.width / 2, y: r.top + r.height / 2 });
+
+// Deal: when a game has just started (only the start line in the log), card backs fly
+// from the deck to each player one round at a time, and my cards flip face up.
+function lookDealIn(state) {
+  if (!_lookMotion() || document.hidden) return;
+  if ((state.log || []).length > 1) return;           // joined a game already under way
+  const deck = document.querySelector('#draw-pile-area .card-back')?.getBoundingClientRect();
+  const mine = [...document.querySelectorAll('#player-hand .card[data-index]')];
+  if (!deck || !mine.length) return;
+  const seats = [...document.querySelectorAll('#opponents-row .opponent')];
+  const layer = FX.layer();
+  const back = '<div class="card-back fly-back"><span class="back-uno">UNO</span><span class="back-party">FIESTA</span></div>';
+  const STEP = 120;                                     // ms between cards
+  mine.forEach(el => { el.style.visibility = 'hidden'; });
+  const fly = (to, delay, done) => {
+    const el = document.createElement('div');
+    el.className = 'fx-fly lk-deal';
+    el.innerHTML = back;
+    layer.appendChild(el);
+    const a = _lookMid(deck), b = _lookMid(to);
+    const s = Math.max(.3, Math.min(1.2, to.height / 90));
+    const at = (p, sc, r) => `translate(${p.x - 30}px, ${p.y - 45}px) scale(${sc}) rotate(${r}deg)`;
+    const anim = el.animate([{ transform: at(a, 1, 0) }, { transform: at(b, s, (Math.random() * 16 - 8)) }],
+      { duration: 360, delay, easing: 'cubic-bezier(.2,.8,.3,1)', fill: 'backwards' });
+    anim.onfinish = () => { el.remove(); done?.(); };
+  };
+  const rounds = mine.length;
+  for (let i = 0; i < rounds; i++) {
+    // opponents first in each round, then me — like dealing round the table
+    seats.forEach((seat, k) => fly(seat.getBoundingClientRect(), (i * (seats.length + 1) + k) * STEP));
+    const card = mine[i];
+    fly(card.getBoundingClientRect(), (i * (seats.length + 1) + seats.length) * STEP, () => {
+      if (!card.isConnected) return;
+      card.style.visibility = '';
+      // flip face up
+      card.animate([{ transform: 'scaleX(0)' }, { transform: 'scaleX(1)' }], { duration: 180, easing: 'ease-out' });
+      if (typeof FX !== 'undefined') FX.play('draw');
+    });
+  }
+  // safety: never leave a card hidden (re-render, tab switch…)
+  setTimeout(() => mine.forEach(el => { el.style.visibility = ''; }), rounds * (seats.length + 1) * STEP + 900);
+}
+
+// ¡UNO!: a big word over the table and a burst of confetti in the four card colours
+function lookUnoBurst(rect) {
+  if (typeof FX === 'undefined') return;
+  const layer = FX.layer();
+  const c = rect ? _lookMid(rect) : { x: innerWidth / 2, y: innerHeight * .4 };
+  const word = document.createElement('div');
+  word.className = 'lk-uno-burst';
+  word.textContent = t('fx.uno');
+  word.style.left = c.x + 'px';
+  word.style.top = c.y + 'px';
+  layer.appendChild(word);
+  if (!_lookMotion()) {
+    word.animate([{ opacity: 0 }, { opacity: 1, offset: .15 }, { opacity: 1, offset: .8 }, { opacity: 0 }], { duration: 1200 }).onfinish = () => word.remove();
+    return;
+  }
+  word.animate([
+    { transform: 'translate(-50%,-50%) scale(0) rotate(-20deg)', opacity: 1 },
+    { transform: 'translate(-50%,-50%) scale(1.25) rotate(4deg)', offset: .3 },
+    { transform: 'translate(-50%,-50%) scale(1) rotate(-4deg)', offset: .6 },
+    { transform: 'translate(-50%,-60%) scale(1.05) rotate(-4deg)', opacity: 0 }
+  ], { duration: 1300, easing: 'ease-out' }).onfinish = () => word.remove();
+  const colors = ['#e8343b', '#f5ac1d', '#22a454', '#2c6ae0', '#ff4f9a', '#ffd54a'];
+  for (let i = 0; i < 36; i++) {
+    const bit = document.createElement('span');
+    bit.className = 'lk-confetti';
+    bit.style.left = c.x + 'px';
+    bit.style.top = c.y + 'px';
+    bit.style.background = colors[i % colors.length];
+    layer.appendChild(bit);
+    const ang = Math.random() * Math.PI * 2, d = 80 + Math.random() * 160;
+    bit.animate([
+      { transform: 'translate(-50%,-50%) rotate(0)', opacity: 1 },
+      { transform: `translate(calc(-50% + ${Math.cos(ang) * d}px), calc(-50% + ${Math.sin(ang) * d + 110}px)) rotate(${Math.random() * 720}deg)`, opacity: 0 }
+    ], { duration: 1000 + Math.random() * 500, easing: 'cubic-bezier(.1,.7,.4,1)' }).onfinish = () => bit.remove();
+  }
+}

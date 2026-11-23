@@ -106,6 +106,8 @@ function afterGameRender(state, firstDraw) {
   renderMyFace(state);
   markHandBadges(state);
   fitHand();
+  // new look (look.js): cards are dealt out one by one when a game starts
+  if (firstDraw && typeof lookDealIn === 'function') lookDealIn(state);
   updateTurnTimer(state);
   updateMenuDot(state);
   if (isTutorial()) { if (typeof tutorialRender === 'function') tutorialRender(state); return; }

@@ -532,3 +532,20 @@ h2 { text-wrap: balance; }
   .toi-name { font-size: .72rem; }
   .toi-label { font-size: .52rem; letter-spacing: .4px; }
 }
+
+/* ============================================================
+   7. MOVEMENT
+   Deal at the start of a game, higher arc + landing bounce for played cards (fx.js),
+   and a big ¡UNO! with confetti (look.js). Calm mode keeps it still.
+   ============================================================ */
+.lk-uno-burst {
+  position: fixed; z-index: 10;
+  font-family: var(--lk-display); font-size: 4.5rem; line-height: 1;
+  color: var(--lk-gold);
+  -webkit-text-stroke: 4px var(--lk-out); paint-order: stroke fill;
+  text-shadow: 5px 6px 0 var(--lk-out);
+  white-space: nowrap; pointer-events: none;
+}
+.lk-confetti { position: fixed; z-index: 9; width: 8px; height: 13px; border-radius: 2px; pointer-events: none; }
+.fx-fly.lk-deal { position: fixed; left: 0; top: 0; }
+.fx-uno-word { font-family: var(--lk-display); }

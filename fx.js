@@ -259,9 +259,10 @@ const FX = (() => {
         await el.animate([{ transform: place(c, 1.7, 0) }, { transform: place(b, fitScale(to), 4), opacity: .95 }],
           { duration: 330, easing: 'cubic-bezier(.5,0,.8,.4)', fill: 'forwards' }).finished;
       } else {
-        const top = { x: (a.x + b.x) / 2, y: Math.min(a.y, b.y) - 50 };
-        await el.animate([{ transform: place(a, fitScale(from), 0) }, { transform: place(top, 1, -6), offset: .5 },
-          { transform: place(b, fitScale(to), 4), opacity: .95 }], { duration: 420, easing: 'ease-in-out', fill: 'forwards' }).finished;
+        // new look (step 7): a higher arc, the card grows a little and turns on the way
+        const top = { x: (a.x + b.x) / 2, y: Math.min(a.y, b.y) - 80 };
+        await el.animate([{ transform: place(a, fitScale(from), 0) }, { transform: place(top, 1.15, -12), offset: .5 },
+          { transform: place(b, fitScale(to), 4), opacity: .95 }], { duration: 480, easing: 'cubic-bezier(.3,.7,.3,1)', fill: 'forwards' }).finished;
       }
     } catch (_) {}
     el.remove();
@@ -415,6 +416,8 @@ const FX = (() => {
         if (!motion()) { if (!mine && !rush) await staticSpot(html, title, line, 700); break; }
         await flyCard(html, from, pileRect(), (mine && !e.speed) || rush ? null : { title, line, hold: 650 });
         ring(pileRect(), HEX[e.card.color] || '#fff', 1.7);
+        // new look: the pile gives a small bounce as the card lands
+        document.getElementById('top-card')?.animate([{ transform: 'scale(1.1) rotate(-3deg)' }, { transform: 'scale(1) rotate(0)' }], { duration: 220, easing: 'ease-out' });
         break;
       }
       case 'color':
@@ -437,6 +440,8 @@ const FX = (() => {
       case 'uno':
         play('uno');
         popIcon(seatRect(e.pid), `<span class="fx-uno-word">${esc(t('fx.uno'))}</span>`, 2);
+        // new look (look.js): big ¡UNO! over the table with confetti
+        if (typeof lookUnoBurst === 'function') lookUnoBurst(pileRect());
         break;
       case 'unoCaught':
         play('buzzer');

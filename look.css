@@ -361,3 +361,95 @@ body.calm .opponent.active-player .seat-ring::before, body.calm .seat-pill-uno {
   .opponent-cards { height: 24px; }
   .opponent-cards .card-back.mini { width: 14px; height: 20px; margin-left: -8px; }
 }
+
+/* ============================================================
+   5. TITLE SCREEN
+   Big logo (a fan of real cards + UNO / FIESTA), clear buttons, and the long rules
+   summary moved out: "Cómo jugar" opens the full rules window instead.
+   Button order: name → Jugar contra bots → Crear sala / Unirse → guided game → rules.
+   ============================================================ */
+#screen-landing {
+  background:
+    radial-gradient(ellipse at 50% 22%, rgba(255,213,74,.16), rgba(255,213,74,0) 40%),
+    radial-gradient(ellipse at 50% 30%, #c8126c 0%, #74003a 50%, #24001a 90%);
+}
+.landing-card {
+  background: rgba(30,6,20,.55);
+  border: 1px solid rgba(255,255,255,.1);
+  border-radius: 24px;
+  padding: 1.6rem 1.6rem 1.3rem;
+  width: min(420px, 94vw);
+  gap: .85rem;
+}
+.landing-card .rules-card { display: none; }
+.landing-lang   { order: 0; }
+.game-title     { order: 1; }
+.landing-card > .tagline { order: 2; margin-top: -.2rem; color: #ffd0e6; }
+.name-emoji-area { order: 3; margin-top: .3rem; }
+#quick-bots-btn { order: 4; }
+.landing-card > .btn-group { order: 5; }
+#join-form      { order: 6; }
+#tutorial-link  { order: 7; }
+.how-link       { order: 8; }
+#landing-error  { order: 9; }
+.landing-card > p.muted { order: 10; }
+.stats-link     { order: 11; }
+
+/* logo */
+.game-title { position: relative; padding-top: 4px; }
+.title-fan { display: flex; justify-content: center; align-items: flex-end; height: 96px; }
+.title-fan .card { width: 54px !important; height: 81px !important; margin-left: -16px; transform-origin: 50% 110%; }
+.title-fan .card:first-child { margin-left: 0; }
+.title-fan .card:nth-child(1) { rotate: -18deg; translate: 0 8px; }
+.title-fan .card:nth-child(2) { rotate: -6deg; }
+.title-fan .card:nth-child(3) { rotate: 6deg; }
+.title-fan .card:nth-child(4) { rotate: 18deg; translate: 0 8px; }
+.game-title .title-uno {
+  font-family: var(--lk-display); font-weight: 400;
+  font-size: 4.6rem; line-height: .9; letter-spacing: 1px;
+  color: var(--lk-gold); -webkit-text-fill-color: var(--lk-gold);
+  background: none; border: 0; padding: 0; box-shadow: none; outline: none;
+  -webkit-text-stroke: 4px var(--lk-out); paint-order: stroke fill;
+  text-shadow: 5px 6px 0 var(--lk-out);
+  margin-top: -34px; rotate: -4deg; position: relative; z-index: 1;
+}
+.game-title .title-party {
+  font-family: var(--lk-display); font-weight: 400;
+  font-size: 1.9rem; letter-spacing: 7px; line-height: 1;
+  color: #fff; -webkit-text-fill-color: #fff;
+  -webkit-text-stroke: 2.5px var(--lk-out); paint-order: stroke fill;
+  text-shadow: 3px 4px 0 var(--lk-out);
+  rotate: -4deg; margin-top: 2px; position: relative; z-index: 1;
+}
+.game-title .title-uno::before, .game-title .title-uno::after,
+.game-title .title-party::before, .game-title .title-party::after { display: none; }
+
+/* big chunky buttons (same family as step 6) */
+#screen-landing .btn { font-family: var(--lk-display); font-weight: 400; letter-spacing: .4px; border-radius: 14px; min-height: 50px; font-size: 1.15rem; }
+#quick-bots-btn {
+  background: var(--lk-gold); color: var(--lk-out); border: 0;
+  box-shadow: 0 4px 0 #b8860b, 0 8px 16px rgba(0,0,0,.35);
+  font-size: 1.35rem; min-height: 58px;
+}
+#quick-bots-btn:hover { background: #ffde6b; }
+#create-btn {
+  background: var(--lk-pink); color: #fff;
+  box-shadow: 0 4px 0 #a3105e, 0 8px 16px rgba(0,0,0,.35);
+  -webkit-text-stroke: 1px var(--lk-out); paint-order: stroke fill;
+}
+.landing-card > .btn-group .btn-secondary {
+  background: rgba(255,255,255,.12); color: #fff;
+  box-shadow: 0 4px 0 rgba(0,0,0,.35);
+}
+#screen-landing .btn:active { transform: translateY(3px); box-shadow: 0 1px 0 rgba(0,0,0,.4); }
+#tutorial-link, #tutorial-link.first-time {
+  background: rgba(255,255,255,.07); border: 1.5px dashed rgba(255,255,255,.3);
+  color: #fff; font-size: 1rem; min-height: 46px;
+}
+.how-link { align-self: center; color: #ffd0e6; font-size: .9rem; }
+.stats-link { align-self: center; color: #ffd0e6; }
+@media (max-height: 700px) {
+  .title-fan { height: 70px; }
+  .title-fan .card { width: 40px !important; height: 60px !important; }
+  .game-title .title-uno { font-size: 3.6rem; margin-top: -26px; }
+}

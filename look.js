@@ -79,3 +79,13 @@ addStrings({
   'seat.card':  ['{n} carta', '{n} card'],
   'seat.cards': ['{n} cartas', '{n} cards']
 });
+
+// ---- 5. Title screen ---------------------------------------------------------
+addStrings({ 'land.howLink': ['Cómo jugar', 'How to play'] });
+// four real cards fanned behind the logo
+document.addEventListener('DOMContentLoaded', () => {
+  const fan = document.querySelector('.title-fan');
+  if (!fan || typeof buildCardHTML !== 'function') return;
+  fan.innerHTML = [['red','5'], ['yellow','draw2'], ['green','7'], ['blue','reverse']]
+    .map(([color, value]) => buildCardHTML({ color, value })).join('');
+});

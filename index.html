@@ -19,7 +19,7 @@
   <link rel="stylesheet" href="style.css?v=2">
   <link rel="stylesheet" href="extras.css?v=2">
   <!-- new look (look.css + look.js): cards, table, hand fan, seats, title screen, font, movement -->
-  <link rel="stylesheet" href="look.css?v=4">
+  <link rel="stylesheet" href="look.css?v=5">
   <script src="https://cdn.jsdelivr.net/npm/emoji-mart@5/dist/browser.js"></script>
 </head>
 <body>
@@ -29,7 +29,7 @@
   <div class="landing-card">
     <!-- Y6: language switch -->
     <div class="landing-lang"><span class="lang-switch"><button type="button" class="lang-btn" data-lang="es" onclick="setLanguage('es')">ES</button><button type="button" class="lang-btn" data-lang="en" onclick="setLanguage('en')">EN</button></span></div>
-    <h1 class="game-title"><span class="title-uno">UNO</span><span class="title-party">FIESTA</span></h1>
+    <h1 class="game-title"><span class="title-fan" aria-hidden="true"></span><span class="title-uno">UNO</span><span class="title-party">FIESTA</span></h1>
     <p class="tagline" data-i18n="land.tagline">¡La fiesta de UNO con cartas especiales!</p>
     <div class="rules-card">
       <h2 data-i18n="land.howTitle">Cómo jugar</h2>
@@ -67,6 +67,8 @@
     <!-- G1: one tap into a game against 3 bots -->
     <button class="btn btn-bots-quick" id="quick-bots-btn" onclick="handleQuickBots()">🤖 <span data-i18n="land.bots">Jugar contra bots</span></button>
     <div id="landing-error" class="error hidden"></div>
+    <!-- new look (title screen): the rules summary above is hidden on the start page; this opens the full rules window -->
+    <button type="button" class="link-btn how-link" onclick="openRules()">📖 <span data-i18n="land.howLink">Cómo jugar</span></button>
     <p class="muted" style="font-size:.75rem;text-align:center" data-i18n="land.players">Hasta 10 jugadores · No se necesita cuenta</p>
     <!-- G5: my stats and badges -->
     <button type="button" class="link-btn stats-link" onclick="openMyStats()">🏅 <span data-i18n="stats.open">Tus estadísticas e insignias</span><span id="stats-link-count"></span></button>
@@ -372,7 +374,7 @@
 <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-database-compat.js"></script>
 <script src="i18n.js?v=4"></script>
 <script src="fx.js?v=1"></script>
-<script src="look.js?v=3"></script>
+<script src="look.js?v=4"></script>
 <script src="app.js?v=10"></script>
 <script src="extras.js?v=3"></script>
 <script src="tutorial.js?v=2"></script>

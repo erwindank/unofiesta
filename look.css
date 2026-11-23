@@ -242,3 +242,31 @@ body.calm .dir-ring ellipse, body.calm .dir-ring.flip { animation: none; }
 @media (max-width: 380px) {
   .game-table .pile-area { padding: 36px 54px 28px; gap: 1.4rem; }
 }
+
+/* ============================================================
+   3. YOUR HAND IN A FAN
+   Rounder arc (extras.js fitHand), bigger cards on large screens.
+   On your turn the cards you can play rise and glow; the rest go dim.
+   ============================================================ */
+.hand-area {
+  background: linear-gradient(180deg, rgba(20,6,15,.55), rgba(20,6,15,.92));
+  border-top: 1px solid rgba(255,213,74,.18);
+}
+.player-hand.fitted { padding-top: 22px; padding-bottom: 16px; }
+@media (min-width: 700px) and (min-height: 700px) {
+  .player-hand .card { width: 76px; height: 114px; }
+}
+.player-hand.fitted .card.can-play {
+  translate: 0 calc(var(--lift, 0px) - 12px);
+  box-shadow: 0 0 0 3px var(--lk-gold), 0 0 18px rgba(255,213,74,.55), 0 8px 14px rgba(0,0,0,.5);
+}
+.player-hand .card.cant-play { filter: brightness(.5) saturate(.6); }
+/* point at a card and it lifts (straightens out of the fan) */
+.player-hand.fitted .card.playable:hover,
+.player-hand.fitted .card.playable:focus-visible {
+  transform: none;
+  translate: 0 calc(var(--lift, 0px) - 22px);
+  rotate: 0deg;
+  z-index: 6;
+}
+.player-hand.fitted .card.cant-play:hover { translate: 0 calc(var(--lift, 0px) - 6px); }

@@ -128,19 +128,22 @@ function renderMyFace(state) {
   const me = state.players.find(p => p.id === localUid);
   if (me) el.innerHTML = seatFaceHTML(state, me);
 }
-// ✓ playable / ✕ not on my turn; ⚡ on a card I can speed-play (or play on the mini-pile)
+// On my turn: playable cards rise and glow (.can-play), the rest go dim (.cant-play).
+// New look (step 3): the ✓ / ✕ badges are gone; only ⚡ (speed play / mini-pile) keeps a badge.
 function markHandBadges(state) {
   const myTurn = myTurnNow(state);
   const hand = state.hands?.[localUid] || [];
   document.querySelectorAll('#player-hand .card[data-index]').forEach(el => {
     el.querySelector('.hand-badge')?.remove();
-    el.classList.remove('cant-play');
+    el.classList.remove('cant-play', 'can-play');
     const c = hand[+el.dataset.index];
     if (!c) return;
     let kind = null;
     if (el.classList.contains('speed-playable')) kind = 'speed';
     else if (myTurn) kind = isActualPlayable(c, state) ? 'ok' : 'no';
     if (!kind) return;
+    if (kind === 'no') { el.classList.add('cant-play'); return; }
+    if (kind === 'ok') { el.classList.add('can-play'); return; }
     const b = document.createElement('span');
     b.className = `hand-badge hb-${kind}`;
     b.title = t('badge.' + kind);
@@ -159,9 +162,10 @@ function fitHand() {
   const n = cards.length, w = cards[0].offsetWidth || 60;
   const avail = hand.clientWidth - 8;
   const overlap = n > 1 ? Math.min(w * 0.72, Math.max(0, (n * w - avail) / (n - 1) + 2)) : 0;
-  const k = Math.min(0.9, 40 / (n * n));
+  const k = Math.min(2.6, 60 / (n * n));
   hand.style.setProperty('--overlap', overlap + 'px');
-  hand.style.setProperty('--fan', (n > 1 ? Math.min(2.4, 16 / n) : 0) + 'deg');
+  // new look: a rounder fan (up to 5° between cards, less when the hand is big)
+  hand.style.setProperty('--fan', (n > 1 ? Math.min(5, 30 / n) : 0) + 'deg');
   cards.forEach((el, i) => {
     const off = i - (n - 1) / 2;
     el.style.setProperty('--i', i);
